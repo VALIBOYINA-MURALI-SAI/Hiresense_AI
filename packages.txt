@@ -1,8 +1,4 @@
-streamlit
-pandas
-numpy
-scikit-learn
-pdfplumber
-spacy
-nltk
-python-docx
+tesseract-ocr
+poppler-utils
+chromium
+chromium-driver
