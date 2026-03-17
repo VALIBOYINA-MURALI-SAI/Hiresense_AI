@@ -6,9 +6,6 @@
 <img src="https://github.com/user-attachments/assets/76906dbc-343d-4267-ace5-048d428fff42" width="20px"> Hire Sense AI is your all-in-one tool to analyze, optimize, and craft resumes that stand out, helping you land your dream job.  
 </div>
 
-
-
-
 ## 📊 **GitHub Stats**
 
 <div align="center">
@@ -212,15 +209,6 @@ Start the application using Streamlit:
    streamlit run app.py
    ```
 
-<details>
-  <summary>📁 Folder Structure After Adding <code>.env</code></summary>
-
-> 🔐 **Important:**  
-> - **Do not commit your `.env` file** to version control (e.g., GitHub). It should be listed in `.gitignore`.
-> - If you're collaborating, you can provide a safe `.env.example` file with dummy data.
-  
-</details>
-
 ## Admin Login Credentials
 
 ### 🔹 New Login Credentials:
@@ -365,7 +353,7 @@ Explore the code, contribute, or drop a <img src="https://github.com/user-attach
 ## 🛡️ Maintainer  
 
 > **_This repository is maintained by [VALIBOYINA-MURALI-SAI](https://github.com/VALIBOYINA-MURALI-SAI)._**  
-> Have suggestions? Feel free to reach out to [me via email](mailto:het8185@gmail.com). 📧
+> Have suggestions? Feel free to reach out to [me via email](mailto:mv8039@srmist.edu.in). 📧
 
 
 ## 📰 News  
