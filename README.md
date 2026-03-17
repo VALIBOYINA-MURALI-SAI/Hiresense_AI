@@ -218,25 +218,7 @@ Start the application using Streamlit:
 > 🔐 **Important:**  
 > - **Do not commit your `.env` file** to version control (e.g., GitHub). It should be listed in `.gitignore`.
 > - If you're collaborating, you can provide a safe `.env.example` file with dummy data.
-
-  <div align="center">  
-    <table>
-      <tr>
-        <td align="center"><b>🗂️ Folder Structure Preview 1</b></td>
-        <td align="center"><b>🗂️ Folder Structure Preview 2</b></td>
-      </tr>
-      <tr>
-        <td>
-          <img src="https://github.com/user-attachments/assets/a6636ec0-f1e6-45ed-90f5-583ecbf7f67f" alt="Folder Structure Preview 1" height="350px" width="600px">
-        </td>
-        <td>
-          <img src="https://github.com/user-attachments/assets/10fea5d7-5b9f-491e-871f-75a9ab716ebb" alt="Folder Structure Preview 2" height="355px" width="600px">
-        </td>
-      </tr>
-    </table>
-  </div>
   
-
 </details>
 
 ## Admin Login Credentials
