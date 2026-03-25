@@ -1,10 +1,6 @@
 """
-Utils package for Smart Resume AI
-"""
+Utility submodules for Hire Sense AI.
 
-from .resume_analyzer import ResumeAnalyzer
-from .resume_builder import ResumeBuilder
-from .resume_parser import ResumeParser
-from .excel_manager import ExcelManager
-from .database import * 
-from .ai_resume_analyzer import AIResumeAnalyzer
+Imports are not re-exported here so that ``from utils.some_module import …`` does not
+eager-load the whole tree (avoids circular imports on Python 3.14+ / Streamlit Cloud).
+"""

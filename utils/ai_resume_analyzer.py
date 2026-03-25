@@ -11,7 +11,7 @@ import google.generativeai as genai
 import pdfplumber
 from pdf2image import convert_from_path
 
-from utils.pdf_text_layout import extract_resume_text_adaptive_columns
+from .pdf_text_layout import extract_resume_text_adaptive_columns
 import pytesseract
 import tempfile
 import requests

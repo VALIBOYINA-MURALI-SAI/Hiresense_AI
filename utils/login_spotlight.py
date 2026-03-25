@@ -150,14 +150,8 @@ def render_login_spotlight_block() -> None:
             font-size: 0.95rem;
             font-weight: 700;
             color: var(--text);
-            margin: 0 0 0.15rem 0;
+            margin: 0 0 0.75rem 0;
             letter-spacing: -0.02em;
-        }}
-        .hire-ls-sub {{
-            font-size: 0.78rem;
-            color: var(--muted);
-            margin: 0 0 0.85rem 0;
-            line-height: 1.45;
         }}
         .hire-ls-grid {{
             display: grid;
@@ -202,7 +196,6 @@ def render_login_spotlight_block() -> None:
         </style>
         <div class="hire-ls-wrap">
             <p class="hire-ls-title">Community snapshot</p>
-            <p class="hire-ls-sub">Trust and experience scores from this app’s <strong>Feedback</strong> page — large type for quick reading.</p>
             <div class="hire-ls-grid">
                 {cell(t_dim, "Trust signal", t_num, t_foot)}
                 {cell(e_dim, "Experience score", e_num, e_foot)}
