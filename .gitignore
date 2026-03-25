@@ -136,3 +136,22 @@ Thumbs.db
 # Resume files uploaded by users
 uploads/
 resume_data.db
+
+# Personal / uploaded resume PDFs — never commit real resumes
+*.pdf
+*.PDF
+
+# Excel exports
+*.xlsx
+*.xls
+
+# Local dev / bootstrap helpers
+bootstrap_env.py
+.env.example
+
+# One-off patch scripts (internal tooling only)
+scripts/patch_*.py
+scripts/inspect_*.py
+
+# Test artefacts and bytecode inside tests/
+tests/__pycache__/

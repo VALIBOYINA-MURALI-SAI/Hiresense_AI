@@ -2,9 +2,27 @@ import spacy
 from collections import Counter
 from datetime import datetime
 
+try:
+    from utils.resume_corpus_insights import merge_skill_lexicon
+except ImportError:
+    merge_skill_lexicon = None
+
+
 class ResumeAnalyzer:
     def __init__(self):
         self.nlp = spacy.load("en_core_web_sm")
+        base_skills = {
+            "python", "java", "javascript", "react", "node.js", "sql",
+            "html", "css", "aws", "docker", "kubernetes", "git",
+            "machine learning", "ai", "data science", "analytics",
+        }
+        if merge_skill_lexicon is not None:
+            try:
+                self._tech_skills = merge_skill_lexicon(set(base_skills))
+            except Exception:
+                self._tech_skills = set(base_skills)
+        else:
+            self._tech_skills = set(base_skills)
         
     def analyze_resume(self, resume_text):
         """Analyze resume text and return metrics"""
@@ -42,13 +60,8 @@ class ResumeAnalyzer:
     
     def _extract_skills(self, doc):
         """Extract skills from resume"""
-        # Common technical skills keywords
-        tech_skills = {
-            "python", "java", "javascript", "react", "node.js", "sql",
-            "html", "css", "aws", "docker", "kubernetes", "git",
-            "machine learning", "ai", "data science", "analytics"
-        }
-        
+        tech_skills = self._tech_skills
+
         skills = set()
         for token in doc:
             if token.text.lower() in tech_skills:
@@ -58,7 +71,7 @@ class ResumeAnalyzer:
                 bigram = (token.text + " " + doc[token.i + 1].text).lower()
                 if bigram in tech_skills:
                     skills.add(bigram)
-        
+
         return skills
     
     def _analyze_experience(self, doc):

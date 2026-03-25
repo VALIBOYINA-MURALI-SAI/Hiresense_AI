@@ -1,7 +1,27 @@
+import importlib.util
 import pypdf
 import docx
 import re
 from io import BytesIO
+from pathlib import Path
+
+def _parser_corpus_skill_keywords():
+    """Load corpus lexicon without importing the heavy utils package __init__."""
+    try:
+        path = Path(__file__).resolve().parent / "resume_corpus_insights.py"
+        spec = importlib.util.spec_from_file_location("_resume_corpus_insights", path)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(mod)
+        lex = mod.get_corpus_skill_lexicon()
+        return [
+            t
+            for t in lex
+            if len(t) <= 22 and t.count(" ") <= 1 and t.isascii()
+        ][:180]
+    except Exception:
+        return []
+
 
 class ResumeParser:
     def __init__(self):
@@ -62,11 +82,15 @@ class ResumeParser:
         experience = []
         education = []
         
-        # Common programming languages and tools
-        skill_keywords = ['python', 'java', 'javascript', 'html', 'css', 'sql', 'react', 'angular', 'vue', 
-                         'node', 'express', 'django', 'flask', 'spring', 'docker', 'kubernetes', 'aws', 
-                         'azure', 'git', 'jenkins', 'jira']
-                         
+        # Common programming languages and tools + corpus-derived terms (DB / Excel export)
+        skill_keywords = [
+            'python', 'java', 'javascript', 'html', 'css', 'sql', 'react', 'angular', 'vue',
+            'node', 'express', 'django', 'flask', 'spring', 'docker', 'kubernetes', 'aws',
+            'azure', 'git', 'jenkins', 'jira',
+        ]
+        extra = _parser_corpus_skill_keywords()
+        skill_keywords = sorted(set(skill_keywords) | set(extra))
+
         # Look for skills
         text_lower = text.lower()
         for skill in skill_keywords:

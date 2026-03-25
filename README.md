@@ -174,31 +174,29 @@ Install the required Python packages:
 
 4. **Download the spaCy model:**
 
-Ensure that the necessary NLP model is installed:
+Install the English pipeline used by resume analytics (`en_core_web_sm`). Prefer the official CLI:
 
    ```bash
    python -m spacy download en_core_web_sm
    ```
-   
-``Congratulations 🥳😱 your set-up 👆 and installation is finished 🥳😱``
+
+If that command fails (often with an **SSL certificate** error on Windows or corporate networks), use **pip** to install the same model wheel instead—see [Troubleshooting](#troubleshooting).
+
+**Congratulations — setup and installation are complete.**
 
 
-5. **Configure Environment Variables (Mandatory for AI-Analyzer Functionality):**
+5. **Configure environment variables (AI and optional features):**
 
-To enable access to the **Gemini API** used by the AI Resume Analyzer, you need to set up environment variables securely.
-
-#### ✅ Step-by-Step:
-
-1. **Create a `.env` file** inside the `utils/` directory.
-2. **Paste your Google Gemini API key** in the following format:
-
-#### 📄 Example content for `utils/.env`:
-```env
-GOOGLE_API_KEY=your_google_gemini_api_key
-```
+1. Copy **[`.env.example`](.env.example)** to **`.env`** in the **repository root** (recommended). You can also use **`utils/.env`**; the app loads the root file first, then `utils/.env` (duplicate keys in `utils/.env` win).
+2. Fill in at least **`GOOGLE_API_KEY`** for the AI Resume Analyzer (Gemini). See `.env.example` for every supported variable, including optional ones.
+3. Restart Streamlit after changing env files.
 
 #### <img src="https://assets.codepen.io/1468070/Google+G+Icon.png" alt="Google LOGO" width="1.6%" /> Get your Gemini API Key:
-Visit  **[Google AI Studio – Gemini API Access](https://aistudio.google.com/app/apikey)** 👉 Grab and use your **own API key** — Since Mine One Have Usage Limits.
+Visit **[Google AI Studio – Gemini API Access](https://aistudio.google.com/app/apikey)** and use your own key.
+
+#### Streamlit Cloud
+
+Add the same logical settings in **App settings → Secrets** (TOML). **`GOOGLE_API_KEY`** and **`OPENROUTER_API_KEY`** in Secrets are picked up by the analyzer. Admin and OAuth keys are **Secrets-only** (not read from `.env` on the server). See **Environment & secrets reference** below.
 
 
 6. **Run the application:**
@@ -239,15 +237,16 @@ admin123
    docker build -t hire-sense-ai .
    ```
 
-2. Run the container:
+2. Run the container (copy `.env.example` → `.env` and fill keys, or pass `-e`):
    ```bash
-   docker run -p 8501:8501 -e GOOGLE_API_KEY=your_key hire-sense-ai
+   docker run -p 8501:8501 --env-file .env hire-sense-ai
    ```
 
 ## Project Structure
 
 ```
 Hiresense_AI/
+├── bootstrap_env.py        # Early .env + TLS defaults (imported first from app.py)
 ├── app.py                  # Main application file
 ├── config/                 # Configuration files
 │   ├── courses.py          # Course recommendations
@@ -266,7 +265,8 @@ Hiresense_AI/
 │   ├── ai_resume_analyzer.py  # AI analysis logic
 │   ├── resume_analyzer.py     # Standard analysis logic
 │   └── resume_builder.py      # Resume builder logic
-├── .env                    # Environment variables (not in git)
+├── .env.example            # Template for environment variables (safe to commit)
+├── .env                    # Your real keys (not in git; root and/or utils/.env)
 ├── .gitignore              # Git ignore file
 ├── Dockerfile              # Docker configuration
 ├── LICENSE                 # License file
@@ -274,15 +274,180 @@ Hiresense_AI/
 └── requirements.txt        # Python dependencies
 ```
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
-### Common Issues
+You may hit environment-specific issues while installing or running the app. Try the items below first; if something still fails, [open an issue](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI/issues) with your OS, Python version, and the full error message.
 
-1. **PDF Extraction Fails**: Ensure Tesseract OCR is properly installed and in your PATH
-2. **API Key Errors**: Verify your API keys in the `.env` file
-3. **Missing Dependencies**: Run `pip install -r requirements.txt` again
+### spaCy: `SSL: CERTIFICATE_VERIFY_FAILED` when running `python -m spacy download`
 
-### Getting Help
+The download command fetches metadata from GitHub over HTTPS. Some setups (Windows, corporate proxies, SSL inspection) do not trust the certificate chain Python uses, which produces **unable to get local issuer certificate**.
+
+**Workaround (install the model with pip):** use your virtual environment’s Python and relax host checks only for this install:
+
+**Windows (PowerShell), from the project folder with `venv` activated:**
+
+```powershell
+python -m pip install --trusted-host github.com --trusted-host release-assets.githubusercontent.com --trusted-host objects.githubusercontent.com "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+```
+
+**macOS / Linux** (same idea):
+
+```bash
+python -m pip install --trusted-host github.com --trusted-host release-assets.githubusercontent.com --trusted-host objects.githubusercontent.com "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+```
+
+Then verify:
+
+```bash
+python -c "import spacy; spacy.load('en_core_web_sm'); print('en_core_web_sm OK')"
+```
+
+Use a wheel version that matches your **spaCy** major/minor (for spaCy **3.8.x**, `en_core_web_sm-3.8.0` is appropriate).
+
+**Longer-term fix:** install your organization’s root CA in the system trust store, or set `SSL_CERT_FILE` to a valid CA bundle (for example the path printed by `python -c "import certifi; print(certifi.where())"`). Prefer fixing trust over relying on `--trusted-host` for everyday use.
+
+### Pip: “please run … `python.exe -m pip install --upgrade pip`”
+
+Upgrade pip using the **same interpreter** as your venv:
+
+```bash
+python -m pip install --upgrade pip
+```
+
+(On Windows, that is typically `venv\Scripts\python.exe` after you activate the venv.)
+
+### PDF extraction / OCR
+
+- **Scanned PDFs:** install [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) and ensure it is on your `PATH`. On Windows, **Poppler** is often required for `pdf2image`; see the error message from the app for download hints.
+- **Empty or garbled text:** try exporting the resume again from Word/Google Docs as PDF, or use a DOCX upload.
+- **Layout (single vs two columns):** the app uses `utils/pdf_text_layout.py` to read text in visual order. If a rare template misbehaves, report it with a sample (redacted) PDF.
+
+**Developers — layout regression tests:** place `Resume.pdf` and `VALIBOYINA-MURALI-SAI-Resume.pdf` at the **repo root** or under `tests/fixtures/resumes/`, then run:
+
+```bash
+python -m unittest discover -s tests -p test_pdf_text_layout.py -v
+```
+
+### Resume corpus (DB / Excel) for skill lexicon
+
+The app can **widen skill keywords** from local data (no training step):
+
+- `resume_analysis.db` — `skills_tracking` and JSON `skills` on `resume_analysis`
+- `resume_data.db` — `resume_skills.skill_name` when populated
+- Excel export: prefer **`resume_data_export.xlsx`** (any case) in the project root; if missing, the newest **`resume_data_export*.xlsx`** by modification time — regex + cleaned comma tokens
+
+Implementation: `utils/resume_corpus_insights.py` (used by `resume_analytics/analyzer.py` and `utils/resume_parser.py`). Set **`RESUME_CORPUS_ROOT`** if those files live outside the repo root. Refresh happens automatically when file mtimes change.
+
+**Option C — role → skill priors & normalization**
+
+- **Default (production-style):** Excel **role priors are off**. The Standard Analyzer uses **`JOB_ROLES` only** for the skills checklist (plus **alias matching** on those labels, e.g. `js` → JavaScript).
+- **Opt in to cohort priors:** set **`HIRERESUME_ENABLE_ROLE_PRIORS=1`** (or `true` / `yes`). Then up to **12** extra skills can merge in from the export for the **same** `target_role` (exact normalized key; no fuzzy substring role matching).
+- **Priors are filtered** to each role’s **required + recommended technical** vocabulary; **minimum two** export rows per skill for that role.
+- **Force off** even when enabled: **`HIRERESUME_DISABLE_ROLE_PRIORS=1`**. Advanced: **`corpus_prior_skill_cap`** on job requirements.
+
+### Evaluation & feedback (Option A groundwork)
+
+Structured **student feedback** on ATS-style scores gives you stats you can cite (e.g. % “about right”) and a path toward **calibration** and **evidence-linked** analysis later.
+
+**Google Form — suggested questions (keep ~2–3 minutes)**  
+1. **Context:** target **role** (dropdown matching the app); **score shown** by the tool (number); optional date.  
+2. **Likert (1–5):** the score **matched** how strong I think my resume is for that role; **missing skills** felt accurate; suggestions were **actionable**.  
+3. **Quick check:** score felt **too high** / **too low** / **about right**.  
+4. **Optional:** one sentence — what was wrong or missing; optional contact if you allow it.
+
+**Turning responses into stats:** In Google Forms → **Responses** → **Link to Sheets**. Use pivot tables or export CSV for summaries (mean Likert by role, % “about right”, counts of “too high” vs “too low”). Paste your live form URL in the README or app sidebar when it exists.
+
+**Automated regression tests** (`tests/` — PDF layout + skill normalization):
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+PDF layout tests need sample PDFs at the repo root or under `tests/fixtures/resumes/` (see **Developers — layout regression tests** above). Skill normalization tests have no extra fixtures.
+
+### API key / AI features
+
+- Copy [`.env.example`](.env.example) to `.env` (repository root and/or `utils/`) and set **`GOOGLE_API_KEY`**. Restart Streamlit after changes.
+- On **Streamlit Cloud**, add `GOOGLE_API_KEY` (and optionally `OPENROUTER_API_KEY`) in **Secrets** with the same names.
+- Confirm the key is valid in [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+### Gemini / gRPC: `CERTIFICATE_VERIFY_FAILED` (Windows, corporate networks)
+
+If the terminal shows **`ssl_transport_security`** / **`unable to get local issuer certificate`** when you start the app or call Gemini, Python/gRPC often is not using a CA bundle Windows trusts (common with SSL inspection).
+
+1. The app loads **`bootstrap_env.py`** first and, by default, calls **`truststore.inject_into_ssl()`** (package **`truststore`** in `requirements.txt`) so HTTPS uses your **operating system’s trust store** (on Windows this includes many **corporate / antivirus TLS** roots that **certifi** does not ship). That directly targets errors like **`HTTPSConnectionPool` … `unable to get local issuer certificate`** to `generativelanguage.googleapis.com`.
+2. Gemini is configured with **`transport="rest"`** by default. To force gRPC again, set **`GOOGLE_GENAI_TRANSPORT=grpc`** in `.env`.
+3. If you must not use the OS store, set **`HIRERESUME_USE_CERTIFI_ONLY=1`**. Then bootstrap falls back to **certifi** and patches **`ssl._create_default_https_context`**.
+4. Run **`pip install -r requirements.txt`** and restart Streamlit.
+5. If it **still** fails, export your organization’s **root CA** to PEM and set **`SSL_CERT_FILE`** to that file (or install the root into **Windows Trusted Root Certification Authorities** so **truststore** picks it up).
+6. To disable all automatic TLS setup (unusual), set **`HIRERESUME_SKIP_CA_BUNDLE=1`**.
+
+### Environment & secrets reference
+
+| Name | Where to set | Required? | Purpose |
+|------|----------------|-----------|---------|
+| `GOOGLE_API_KEY` | `.env` (root or `utils/`) or Streamlit Secrets | For AI analyzer | Gemini API |
+| `GOOGLE_GENAI_TRANSPORT` | `.env` or process env | Optional | `rest` (default) or `grpc` / `grpc_asyncio` — REST avoids many Windows TLS issues |
+| `OPENROUTER_API_KEY` | `.env` or Streamlit Secrets | Optional | OpenRouter when used |
+| `HIRERESUME_ENABLE_ROLE_PRIORS` | `.env` or process env | Optional | `1` / `true` / `yes` — corpus skill priors |
+| `HIRERESUME_DISABLE_ROLE_PRIORS` | `.env` or process env | Optional | Forces priors off |
+| `HIRERESUME_REQUIRE_USER_OAUTH` | `.env` or process env | Optional | `1` / `true` / `yes` — require OAuth if configured |
+| `RESUME_CORPUS_ROOT` | `.env` or process env | Optional | Override folder for corpus / Excel export discovery |
+| `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GRPC_DEFAULT_SSL_ROOTS_FILE_PATH` | `.env` or system env | Optional | TLS / gRPC (Gemini); app may default these via **certifi** if unset |
+| `HIRERESUME_SKIP_CA_BUNDLE` | `.env` or process env | Optional | `1` / `true` — skip bootstrap TLS helpers entirely |
+| `HIRERESUME_USE_CERTIFI_ONLY` | `.env` or process env | Optional | `1` / `true` — skip **truststore**; use certifi + ssl patch only |
+| `admin_email`, `admin_password` | Streamlit Secrets only | For Cloud admin | Seeds first admin when DB is empty |
+| `oauth_*`, `require_user_oauth` | Streamlit Secrets only | Optional | Google/GitHub sign-in page |
+
+Full descriptions and commented examples: **[`.env.example`](.env.example)**.
+
+### Streamlit Cloud: admin login works locally but not on the deployed app
+
+The app stores admin users in **`resume_data.db`**, which is **not** committed to git. On Streamlit Cloud the database starts empty, so there is no admin row until you seed it. Configure **Secrets** in the Streamlit Cloud dashboard, for example:
+
+```toml
+admin_email = "your@email.com"
+admin_password = "your_secure_password"
+```
+
+The app creates the first admin from these values when the `admin` table is empty. Use the same email and password in the sidebar login.
+
+### Sign in with Google or GitHub (optional)
+
+If you add OAuth client credentials to **`.streamlit/secrets.toml`** (or Streamlit Cloud **Secrets**), the app shows a **sign-in page** before the main UI. Users can sign in with Google or GitHub, or choose **Continue without signing in** unless you force sign-in.
+
+Add a redirect URL that matches your app exactly (including trailing slash if you register it that way), for example:
+
+- Local: `http://localhost:8501/`
+- Streamlit Cloud: `https://YOUR-APP.streamlit.app/`
+
+**Google Cloud Console:** APIs & Services → Credentials → OAuth 2.0 Client ID (Web application) → Authorized redirect URIs = the same value as `oauth_redirect_uri` below.
+
+**GitHub:** Settings → Developer settings → OAuth Apps → Authorization callback URL = same as `oauth_redirect_uri`.
+
+Example secrets (use either or both providers):
+
+```toml
+oauth_redirect_uri = "http://localhost:8501/"
+
+oauth_google_client_id = "....apps.googleusercontent.com"
+oauth_google_client_secret = "..."
+
+oauth_github_client_id = "..."
+oauth_github_client_secret = "..."
+```
+
+To **require** OAuth when credentials are present (no guest access), set `require_user_oauth = true` in secrets or the environment variable `HIRERESUME_REQUIRE_USER_OAUTH=1`.
+
+### Missing or broken dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+If a package fails to build, check that your Python version is supported (this project is often run on **Python 3.10–3.12**; **3.13** may need newer wheels for some libraries).
+
+### Getting help
 
 If you encounter any issues, please [open an issue](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI/issues) on GitHub.
 

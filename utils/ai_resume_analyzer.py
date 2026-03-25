@@ -1,9 +1,14 @@
 import os
+from pathlib import Path
+
+import bootstrap_env  # noqa: F401 — .env + CA paths before Gemini (see repo root)
+
 import streamlit as st
-from dotenv import load_dotenv
 import google.generativeai as genai
 import pdfplumber
 from pdf2image import convert_from_path
+
+from utils.pdf_text_layout import extract_resume_text_adaptive_columns
 import pytesseract
 import tempfile
 import requests
@@ -14,15 +19,22 @@ import re
 
 class AIResumeAnalyzer:
     def __init__(self):
-        # Load environment variables
-        load_dotenv()
-        
-        # Configure Google Gemini AI
         self.google_api_key = os.getenv("GOOGLE_API_KEY")
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-        
+        try:
+            if not self.google_api_key and "GOOGLE_API_KEY" in st.secrets:
+                self.google_api_key = str(st.secrets["GOOGLE_API_KEY"]).strip() or None
+            if not self.openrouter_api_key and "OPENROUTER_API_KEY" in st.secrets:
+                self.openrouter_api_key = str(st.secrets["OPENROUTER_API_KEY"]).strip() or None
+        except Exception:
+            pass
+
+        # Configure Google Gemini AI (REST avoids Windows gRPC TLS / CORP ISSUES)
         if self.google_api_key:
-            genai.configure(api_key=self.google_api_key)
+            transport = os.getenv("GOOGLE_GENAI_TRANSPORT", "rest").strip().lower()
+            if transport not in ("rest", "grpc", "grpc_asyncio"):
+                transport = "rest"
+            genai.configure(api_key=self.google_api_key, transport=transport)
     
     def extract_text_from_pdf(self, pdf_file):
         """Extract text from PDF using pdfplumber and OCR if needed"""
@@ -43,21 +55,37 @@ class AIResumeAnalyzer:
         try:
             # Try direct text extraction with pdfplumber
             try:
-                with pdfplumber.open(temp_path) as pdf:
-                    for page in pdf.pages:
-                        try:
-                            # Suppress specific warnings about PDFColorSpace conversion
-                            import warnings
-                            with warnings.catch_warnings():
-                                warnings.filterwarnings("ignore", message=".*PDFColorSpace.*")
-                                warnings.filterwarnings("ignore", message=".*Cannot convert.*")
-                                page_text = page.extract_text()
-                                if page_text:
-                                    text += page_text + "\n"
-                        except Exception as e:
-                            # Don't show these specific errors to the user
-                            if "PDFColorSpace" not in str(e) and "Cannot convert" not in str(e):
-                                st.warning(f"Error extracting text from page with pdfplumber: {e}")
+                import warnings
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message=".*PDFColorSpace.*")
+                    warnings.filterwarnings("ignore", message=".*Cannot convert.*")
+                    layout_text, _layout_meta = extract_resume_text_adaptive_columns(
+                        temp_path
+                    )
+                if layout_text.strip():
+                    text = layout_text + "\n"
+                else:
+                    with pdfplumber.open(temp_path) as pdf:
+                        for page in pdf.pages:
+                            try:
+                                with warnings.catch_warnings():
+                                    warnings.filterwarnings(
+                                        "ignore", message=".*PDFColorSpace.*"
+                                    )
+                                    warnings.filterwarnings(
+                                        "ignore", message=".*Cannot convert.*"
+                                    )
+                                    page_text = page.extract_text()
+                                    if page_text:
+                                        text += page_text + "\n"
+                            except Exception as e:
+                                if "PDFColorSpace" not in str(e) and "Cannot convert" not in str(
+                                    e
+                                ):
+                                    st.warning(
+                                        f"Error extracting text from page with pdfplumber: {e}"
+                                    )
             except Exception as e:
                 st.warning(f"pdfplumber extraction failed: {e}")
             

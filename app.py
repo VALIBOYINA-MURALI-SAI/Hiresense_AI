@@ -1,8 +1,10 @@
 """
 Hire Sense AI - Main Application
 """
-import time
 import os
+import bootstrap_env  # noqa: F401 — load .env + TLS defaults before utils / gRPC
+
+import time
 try:
     from PIL import Image
 except ImportError:
@@ -34,6 +36,24 @@ from config.database import (
 from utils.ai_resume_analyzer import AIResumeAnalyzer
 from utils.resume_builder import ResumeBuilder
 from utils.resume_analyzer import ResumeAnalyzer
+from utils.oauth_login import (
+    any_oauth_configured,
+    oauth_redirect_uri,
+    google_oauth_configured,
+    github_oauth_configured,
+    google_client_credentials,
+    github_client_credentials,
+    new_oauth_state,
+    build_google_authorize_url,
+    build_github_authorize_url,
+    exchange_google_code,
+    exchange_github_code,
+    fetch_google_profile,
+    fetch_github_user,
+    fetch_github_primary_email,
+    normalize_google_user,
+    normalize_github_user,
+)
 import traceback
 import plotly.express as px
 import pandas as pd
@@ -107,6 +127,15 @@ class ResumeApp:
         if 'selected_role' not in st.session_state:
             st.session_state.selected_role = None
 
+        if "oauth_user" not in st.session_state:
+            st.session_state.oauth_user = None
+        if "oauth_browsing_guest" not in st.session_state:
+            st.session_state.oauth_browsing_guest = False
+        if "oauth_login_step_google" not in st.session_state:
+            st.session_state.oauth_login_step_google = False
+        if "oauth_login_step_github" not in st.session_state:
+            st.session_state.oauth_login_step_github = False
+
         # Initialize database
         init_database()
         # Streamlit Cloud (and any fresh clone): resume_data.db is not in git — seed admin from app secrets once.
@@ -158,6 +187,12 @@ class ResumeApp:
         st.session_state.theme = theme
         theme_class = 'theme-dark' if theme == 'dark' else 'theme-light'
 
+        _hire_oauth_login = bool(st.session_state.get("_hire_ui_oauth_login", False))
+        _hire_oauth_js = "true" if _hire_oauth_login else "false"
+        # All pages (including login) now share the same B/W + green-glow button style
+        _oauth_ui_css = ""
+        _stmain_link_blue_css = ""
+
         st.markdown(f"""
         <style>
         :root.theme-dark {{
@@ -190,6 +225,8 @@ class ResumeApp:
             --button-hover: linear-gradient(135deg, #42a5f5, #1565C0);
             --button-text: #ffffff;
             --button-hover-text: #ffffff;
+            --button-border: 1px solid rgba(129, 199, 132, 0.55);
+            --button-hover-shadow: 0 6px 26px rgba(165, 214, 167, 0.55), 0 0 0 2px rgba(129, 199, 132, 0.5), 0 0 28px rgba(102, 187, 106, 0.45);
             --input-bg: #2d2d2d;
         }}
 
@@ -223,6 +260,8 @@ class ResumeApp:
             --button-hover: linear-gradient(135deg, #42a5f5, #1565C0);
             --button-text: #ffffff;
             --button-hover-text: #ffffff;
+            --button-border: 1px solid rgba(102, 187, 106, 0.65);
+            --button-hover-shadow: 0 8px 28px rgba(165, 214, 167, 0.65), 0 0 0 2px rgba(129, 199, 132, 0.55), 0 0 32px rgba(129, 199, 132, 0.4);
             --input-bg: #ffffff;
 
         }}
@@ -248,14 +287,27 @@ class ResumeApp:
             background: var(--sidebar-bg) !important;
         }}
 
-        .css-1d391kg .stButton > button, .css-1d391kg button {{
+        .css-1d391kg .stButton button,
+        .css-1d391kg [data-testid="stButton"] button {{
             background: var(--button-bg) !important;
+            background-image: var(--button-bg) !important;
+            background-color: var(--primary-dark) !important;
             color: var(--button-text) !important;
+            -webkit-text-fill-color: var(--button-text) !important;
+            border: 2px solid rgba(102, 187, 106, 0.65) !important;
+            box-shadow: 0 2px 14px rgba(129, 199, 132, 0.4), 0 6px 18px rgba(0,0,0,0.14) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease !important;
         }}
 
-        .css-1d391kg .stButton > button:hover, .css-1d391kg button:hover {{
+        .css-1d391kg .stButton button:hover,
+        .css-1d391kg [data-testid="stButton"] button:hover {{
+            transform: translateY(-6px) !important;
             background: var(--button-hover) !important;
+            background-image: var(--button-hover) !important;
             color: var(--button-hover-text) !important;
+            -webkit-text-fill-color: var(--button-hover-text) !important;
+            border-color: rgba(129, 199, 132, 0.95) !important;
+            box-shadow: var(--button-hover-shadow), 0 8px 22px rgba(0,0,0,0.12) !important;
         }}
 
         /* Improve heading contrast */
@@ -315,26 +367,77 @@ class ResumeApp:
             animation: neonPulse 4s ease-in-out infinite;
         }}
 
-        .stButton > button {{
-            background: var(--button-bg);
-            color: var(--button-text);
-            border: none;
-            padding: 0.9rem 1.7rem;
-            border-radius: 18px;
-            font-weight: 700;
+        /* ========== Universal B/W + green-glow button style (matches login page) ========== */
+        .stButton button,
+        [data-testid="stButton"] button,
+        div[data-testid^="stBaseButton"] button,
+        div[data-testid="stDownloadButton"] button {{
+            transform: translateY(0) !important;
+            background: #ffffff !important;
+            background-image: none !important;
+            background-color: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+            border: 2px solid #1a1a1a !important;
+            padding: 0.9rem 1.7rem !important;
+            border-radius: 18px !important;
+            font-weight: 700 !important;
             text-transform: uppercase;
             letter-spacing: 1.1px;
-            cursor: pointer;
-            box-shadow: 0 12px 26px rgba(0,0,0,0.35);
-            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            cursor: pointer !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease !important;
+            opacity: 1 !important;
         }}
 
-        .stButton > button:hover {{
-            transform: translateY(-3px);
-            background: var(--button-hover) !important;
-            color: var(--button-hover-text) !important;
-            box-shadow: 0 18px 34px rgba(0,0,0,0.45), 0 0 18px var(--neon);
-            animation: neonPulse 4s ease-in-out infinite;
+        .stButton button:hover,
+        [data-testid="stButton"] button:hover,
+        div[data-testid^="stBaseButton"] button:hover,
+        div[data-testid="stDownloadButton"] button:hover {{
+            transform: translateY(-6px) !important;
+            background: #f4f4f4 !important;
+            background-image: none !important;
+            background-color: #f4f4f4 !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            border-color: #1a1a1a !important;
+            box-shadow: 0 14px 36px rgba(129, 199, 132, 0.45), 0 0 0 2px rgba(165, 214, 167, 0.75), 0 6px 20px rgba(76, 175, 80, 0.2) !important;
+            animation: none;
+        }}
+
+        /* Link buttons (same B/W style) */
+        [data-testid="stLinkButton"] a,
+        a[data-testid^="stLinkButton"],
+        div[data-testid="stLinkButton"] a {{
+            display: block !important;
+            text-align: center !important;
+            text-decoration: none !important;
+            box-sizing: border-box !important;
+            padding: 0.85rem 1.5rem !important;
+            border-radius: 18px !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 1.1px;
+            background: #ffffff !important;
+            background-image: none !important;
+            background-color: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+            border: 2px solid #1a1a1a !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease !important;
+        }}
+        [data-testid="stLinkButton"] a:hover,
+        a[data-testid^="stLinkButton"]:hover,
+        div[data-testid="stLinkButton"] a:hover {{
+            transform: translateY(-6px) !important;
+            background: #f4f4f4 !important;
+            background-image: none !important;
+            background-color: #f4f4f4 !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            border-color: #1a1a1a !important;
+            box-shadow: 0 14px 36px rgba(129, 199, 132, 0.45), 0 0 0 2px rgba(165, 214, 167, 0.75), 0 6px 20px rgba(76, 175, 80, 0.2) !important;
         }}
 
         .stTextInput > div > div {{
@@ -437,11 +540,173 @@ class ResumeApp:
             }}
         }}
 
+
+        /* ========== Sidebar explicit reinforcement (inherits global B/W) ========== */
+        [data-testid="stSidebar"] .stButton button,
+        [data-testid="stSidebar"] [data-testid="stButton"] button,
+        [data-testid="stSidebar"] button[data-testid^="stBaseButton"],
+        [data-testid="stSidebar"] [data-testid^="stBaseButton"] button,
+        [data-testid="stSidebar"] div[data-testid^="stBaseButton"] button {{
+            background: #ffffff !important;
+            background-image: none !important;
+            background-color: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+            border: 2px solid #1a1a1a !important;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(26,26,26,0.08) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease !important;
+        }}
+        [data-testid="stSidebar"] .stButton button:hover,
+        [data-testid="stSidebar"] [data-testid="stButton"] button:hover,
+        [data-testid="stSidebar"] button[data-testid^="stBaseButton"]:hover,
+        [data-testid="stSidebar"] [data-testid^="stBaseButton"] button:hover,
+        [data-testid="stSidebar"] div[data-testid^="stBaseButton"] button:hover {{
+            transform: translateY(-5px) !important;
+            background: #f4f4f4 !important;
+            background-image: none !important;
+            background-color: #f4f4f4 !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            border-color: #1a1a1a !important;
+            box-shadow: 0 14px 36px rgba(129, 199, 132, 0.45), 0 0 0 2px rgba(165, 214, 167, 0.75), 0 6px 20px rgba(76, 175, 80, 0.2) !important;
+        }}
+
+        /* legacy hash-based sidebar class fallback */
+        .css-1d391kg .stButton button,
+        .css-1d391kg [data-testid="stButton"] button {{
+            background: #ffffff !important;
+            background-image: none !important;
+            background-color: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+            border: 2px solid #1a1a1a !important;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease !important;
+        }}
+        .css-1d391kg .stButton button:hover,
+        .css-1d391kg [data-testid="stButton"] button:hover {{
+            transform: translateY(-5px) !important;
+            background: #f4f4f4 !important;
+            background-image: none !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            border-color: #1a1a1a !important;
+            box-shadow: 0 14px 36px rgba(129, 199, 132, 0.45), 0 0 0 2px rgba(165, 214, 167, 0.75), 0 6px 20px rgba(76, 175, 80, 0.2) !important;
+        }}
         </style>
         <script>
             const themeClass = '{theme_class}';
             document.documentElement.classList.remove('theme-dark', 'theme-light');
             document.documentElement.classList.add(themeClass);
+            const HIRE_OAUTH_LOGIN = {_hire_oauth_js};
+            if (HIRE_OAUTH_LOGIN) {{
+                document.body.dataset.hireUi = 'oauth-login';
+            }} else {{
+                delete document.body.dataset.hireUi;
+            }}
+
+            (function hireSenseStreamlitButtons() {{
+                // Universal B/W + green-glow constants (same as login page)
+                const BG_COLOR = '#ffffff';
+                const BG_HOVER = '#f4f4f4';
+                const TEXT_COLOR = '#111111';
+                const BORDER = '2px solid #1a1a1a';
+                const SHADOW = '0 2px 10px rgba(0,0,0,0.06)';
+                const SHADOW_H = '0 14px 36px rgba(129, 199, 132, 0.45), 0 0 0 2px rgba(165, 214, 167, 0.75), 0 6px 20px rgba(76, 175, 80, 0.2)';
+
+                function skipWidget(btn) {{
+                    if (btn.getAttribute('role') === 'tab') return true;
+                    const skip = ['stFileUploader','stDateInput','stTimeInput','stNumberInput','stColorPicker','stCameraInput'];
+                    for (const id of skip) {{
+                        if (btn.closest('[data-testid="' + id + '"]')) return true;
+                    }}
+                    return false;
+                }}
+
+                function isStreamlitActionButton(btn) {{
+                    if (skipWidget(btn)) return false;
+                    const tid = btn.getAttribute('data-testid') || '';
+                    if (tid.indexOf('stBaseButton') === 0) return true;
+                    if (btn.closest('[data-testid^="stBaseButton"]')) return true;
+                    if (btn.closest('[data-testid="stButton"]')) return true;
+                    if (btn.closest('.stButton')) return true;
+                    if (btn.matches('button[kind="primary"]') || btn.matches('button[kind="secondary"]')) return true;
+                    const inScope = btn.closest('section[data-testid="stMain"], section.main, [data-testid="stSidebar"]');
+                    if (inScope) {{
+                        const r = btn.getBoundingClientRect();
+                        if (r.width >= 96 && r.height >= 30) return true;
+                    }}
+                    return false;
+                }}
+
+                function paintButtons() {{
+                    document.querySelectorAll('.stApp button').forEach((btn) => {{
+                        if (!isStreamlitActionButton(btn)) return;
+                        btn.style.setProperty('background-image', 'none', 'important');
+                        btn.style.setProperty('background-color', BG_COLOR, 'important');
+                        btn.style.setProperty('color', TEXT_COLOR, 'important');
+                        btn.style.setProperty('-webkit-text-fill-color', TEXT_COLOR, 'important');
+                        btn.style.setProperty('border', BORDER, 'important');
+                        btn.style.setProperty('box-shadow', SHADOW, 'important');
+                        btn.style.setProperty('transform', 'translateY(0)', 'important');
+                    }});
+                    document.querySelectorAll('[data-testid="stLinkButton"] a, a[data-testid^="stLinkButton"]').forEach((a) => {{
+                        a.style.setProperty('background-image', 'none', 'important');
+                        a.style.setProperty('background-color', BG_COLOR, 'important');
+                        a.style.setProperty('color', TEXT_COLOR, 'important');
+                        a.style.setProperty('-webkit-text-fill-color', TEXT_COLOR, 'important');
+                        a.style.setProperty('border', BORDER, 'important');
+                        a.style.setProperty('box-shadow', SHADOW, 'important');
+                        a.style.setProperty('text-decoration', 'none', 'important');
+                        a.style.setProperty('transform', 'translateY(0)', 'important');
+                    }});
+                }}
+
+                function addHoverListeners() {{
+                    document.querySelectorAll('.stApp button').forEach((btn) => {{
+                        if (!isStreamlitActionButton(btn) || btn.dataset.hireSenseHover) return;
+                        btn.dataset.hireSenseHover = '1';
+                        btn.addEventListener('mouseenter', () => {{
+                            btn.style.setProperty('background-color', BG_HOVER, 'important');
+                            btn.style.setProperty('box-shadow', SHADOW_H, 'important');
+                            btn.style.setProperty('transform', 'translateY(-6px)', 'important');
+                        }});
+                        btn.addEventListener('mouseleave', () => {{
+                            btn.style.setProperty('background-color', BG_COLOR, 'important');
+                            btn.style.setProperty('box-shadow', SHADOW, 'important');
+                            btn.style.setProperty('transform', 'translateY(0)', 'important');
+                        }});
+                    }});
+                    document.querySelectorAll('[data-testid="stLinkButton"] a, a[data-testid^="stLinkButton"]').forEach((a) => {{
+                        if (a.dataset.hireSenseHover) return;
+                        a.dataset.hireSenseHover = '1';
+                        a.addEventListener('mouseenter', () => {{
+                            a.style.setProperty('background-color', BG_HOVER, 'important');
+                            a.style.setProperty('box-shadow', SHADOW_H, 'important');
+                            a.style.setProperty('transform', 'translateY(-6px)', 'important');
+                        }});
+                        a.addEventListener('mouseleave', () => {{
+                            a.style.setProperty('background-color', BG_COLOR, 'important');
+                            a.style.setProperty('box-shadow', SHADOW, 'important');
+                            a.style.setProperty('transform', 'translateY(0)', 'important');
+                        }});
+                    }});
+                }}
+
+                let t = null;
+                function tick() {{
+                    paintButtons();
+                    addHoverListeners();
+                }}
+                function schedule() {{
+                    clearTimeout(t);
+                    t = setTimeout(tick, 60);
+                }}
+
+                tick();
+                requestAnimationFrame(() => requestAnimationFrame(tick));
+                new MutationObserver(schedule).observe(document.body, {{ childList: true, subtree: true }});
+            }})();
         </script>
         """, unsafe_allow_html=True)
 
@@ -1332,8 +1597,15 @@ class ResumeApp:
                             st.error(f"Error reading file: {str(e)}")
                             return
 
-                        # Analyze the document
-                        analysis = self.analyzer.analyze_resume({'raw_text': text}, role_info)
+                        # Analyze the document (target_role enables Excel corpus skill priors)
+                        job_requirements = {
+                            **role_info,
+                            "target_role": selected_role,
+                            "target_category": selected_category,
+                        }
+                        analysis = self.analyzer.analyze_resume(
+                            {"raw_text": text}, job_requirements
+                        )
                         
                         # Check if analysis returned an error
                         if 'error' in analysis:
@@ -1456,6 +1728,16 @@ class ResumeApp:
 
                         st.metric(
                             "Keyword Match", f"{int(analysis.get('keyword_match', {}).get('score', 0))}%")
+                        _km = analysis.get("keyword_match", {})
+                        if _km.get("corpus_priors_added"):
+                            _meta = _km.get("corpus_prior_meta") or {}
+                            _mr = _meta.get("matched_corpus_role") or selected_role
+                            st.caption(
+                                f"Skills checklist includes **{len(_km['corpus_priors_added'])}** extra terms "
+                                f"from your export data for roles like “{_mr}”: "
+                                f"{', '.join(_km['corpus_priors_added'][:10])}"
+                                + (" …" if len(_km["corpus_priors_added"]) > 10 else "")
+                            )
 
                         if analysis['keyword_match']['missing_skills']:
                             st.markdown("#### Missing Skills:")
@@ -2872,9 +3154,178 @@ class ResumeApp:
 """
         st.sidebar.markdown(message, unsafe_allow_html=True)
 
+    @staticmethod
+    def _query_param_first(name: str):
+        v = st.query_params.get(name)
+        if isinstance(v, (list, tuple)):
+            return v[0] if v else None
+        return v
+
+    def _oauth_require_login(self) -> bool:
+        v = os.environ.get("HIRERESUME_REQUIRE_USER_OAUTH", "").strip().lower()
+        if v in ("1", "true", "yes", "on"):
+            return True
+        try:
+            s = st.secrets.get("require_user_oauth")
+            if s is None:
+                return False
+            return str(s).strip().lower() in ("1", "true", "yes", "on")
+        except Exception:
+            return False
+
+    def _oauth_access_granted(self) -> bool:
+        if st.session_state.get("oauth_user"):
+            return True
+        if not any_oauth_configured():
+            return True
+        if self._oauth_require_login():
+            return False
+        return bool(st.session_state.get("oauth_browsing_guest"))
+
+    def _clear_oauth_query_params(self):
+        try:
+            st.query_params.clear()
+        except Exception:
+            for k in ("code", "state", "error", "error_description", "scope"):
+                try:
+                    if k in st.query_params:
+                        del st.query_params[k]
+                except Exception:
+                    pass
+
+    def _handle_oauth_callback(self):
+        if self._query_param_first("error"):
+            st.session_state["_oauth_error"] = (
+                self._query_param_first("error_description")
+                or self._query_param_first("error")
+                or "Sign-in cancelled."
+            )
+            self._clear_oauth_query_params()
+            st.rerun()
+            return
+        code = self._query_param_first("code")
+        state = self._query_param_first("state")
+        if not code or not state:
+            return
+        expected = st.session_state.get("oauth_state")
+        provider = st.session_state.get("oauth_pending_provider")
+        if not expected or state != expected or not provider:
+            st.session_state["_oauth_error"] = "Sign-in session expired. Please try again."
+            self._clear_oauth_query_params()
+            st.rerun()
+            return
+        redirect = oauth_redirect_uri()
+        if not redirect:
+            st.session_state["_oauth_error"] = "Missing oauth_redirect_uri in Streamlit secrets."
+            self._clear_oauth_query_params()
+            st.rerun()
+            return
+        try:
+            if provider == "google":
+                cid, cs = google_client_credentials()
+                tok = exchange_google_code(str(code), cid, cs, redirect)
+                access = tok.get("access_token")
+                if not access:
+                    raise RuntimeError("No access token from Google.")
+                raw = fetch_google_profile(access)
+                st.session_state.oauth_user = normalize_google_user(raw)
+            elif provider == "github":
+                cid, cs = github_client_credentials()
+                tok = exchange_github_code(str(code), cid, cs, redirect)
+                access = tok.get("access_token")
+                if not access:
+                    raise RuntimeError("No access token from GitHub.")
+                gh_user = fetch_github_user(access)
+                email = fetch_github_primary_email(access)
+                st.session_state.oauth_user = normalize_github_user(gh_user, email)
+            else:
+                raise RuntimeError("Unknown OAuth provider.")
+            st.session_state.oauth_state = None
+            st.session_state.oauth_pending_provider = None
+            st.session_state.oauth_login_step_google = False
+            st.session_state.oauth_login_step_github = False
+            st.session_state["_oauth_error"] = None
+        except Exception as e:
+            st.session_state["_oauth_error"] = str(e)
+        self._clear_oauth_query_params()
+        st.rerun()
+
+    def render_oauth_login_page(self):
+        st.session_state["_hire_ui_oauth_login"] = True
+        self.apply_global_styles()
+        err = st.session_state.pop("_oauth_error", None)
+        _, c2, _ = st.columns([1, 2, 1])
+        with c2:
+            st.markdown("## Hire Sense AI")
+            st.markdown("Sign in with **Google** or **GitHub**, or continue without an account.")
+            if err:
+                st.error(err)
+            redirect = oauth_redirect_uri()
+            if any_oauth_configured() and not redirect:
+                st.warning(
+                    "Add **oauth_redirect_uri** to Streamlit secrets (must match the URL registered "
+                    "at Google/GitHub), for example `http://localhost:8501/` for local runs."
+                )
+
+            if google_oauth_configured():
+                if st.button("Continue with Google", use_container_width=True, key="oauth_btn_google"):
+                    st.session_state.oauth_state = new_oauth_state()
+                    st.session_state.oauth_pending_provider = "google"
+                    st.session_state.oauth_login_step_google = True
+                    st.session_state.oauth_login_step_github = False
+                    st.rerun()
+                if (
+                    redirect
+                    and st.session_state.get("oauth_login_step_google")
+                    and st.session_state.get("oauth_pending_provider") == "google"
+                ):
+                    cid, _ = google_client_credentials()
+                    url = build_google_authorize_url(cid, redirect, st.session_state.oauth_state)
+                    st.link_button("Open Google sign-in →", url=url, use_container_width=True)
+
+            if github_oauth_configured():
+                if st.button("Continue with GitHub", use_container_width=True, key="oauth_btn_github"):
+                    st.session_state.oauth_state = new_oauth_state()
+                    st.session_state.oauth_pending_provider = "github"
+                    st.session_state.oauth_login_step_github = True
+                    st.session_state.oauth_login_step_google = False
+                    st.rerun()
+                if (
+                    redirect
+                    and st.session_state.get("oauth_login_step_github")
+                    and st.session_state.get("oauth_pending_provider") == "github"
+                ):
+                    cid, _ = github_client_credentials()
+                    url = build_github_authorize_url(cid, redirect, st.session_state.oauth_state)
+                    st.link_button("Open GitHub sign-in →", url=url, use_container_width=True)
+
+            if not google_oauth_configured() and not github_oauth_configured():
+                st.info(
+                    "OAuth is not configured. Add client IDs and secrets to `.streamlit/secrets.toml` "
+                    "(see README). Until then, everyone can use the app."
+                )
+                if st.button("Continue to app", use_container_width=True, key="oauth_continue_no_config"):
+                    st.session_state.oauth_browsing_guest = True
+                    st.rerun()
+            elif not self._oauth_require_login():
+                st.markdown("---")
+                if st.button("Continue without signing in", use_container_width=True, key="oauth_guest"):
+                    st.session_state.oauth_browsing_guest = True
+                    st.session_state.oauth_login_step_google = False
+                    st.session_state.oauth_login_step_github = False
+                    st.rerun()
+
+        self.add_footer()
 
     def main(self):
         """Main application entry point"""
+        self._handle_oauth_callback()
+        if not self._oauth_access_granted():
+            self.render_oauth_login_page()
+            return
+
+        st.session_state["_hire_ui_oauth_login"] = False
+
         # Theme (default to dark)
         if 'theme' not in st.session_state:
             st.session_state.theme = 'dark'
@@ -2921,14 +3372,19 @@ class ResumeApp:
             components.html(logo_html, height=220)
             st.title("Hire Sense AI")
             st.markdown("---")
+            ou = st.session_state.get("oauth_user")
+            if ou:
+                st.caption(f"Signed in: {ou.get('name') or ou.get('email') or 'User'}")
+                if st.button("Sign out", key="oauth_user_sign_out"):
+                    st.session_state.oauth_user = None
+                    st.session_state.oauth_browsing_guest = False
+                    st.session_state.oauth_login_step_google = False
+                    st.session_state.oauth_login_step_github = False
+                    st.rerun()
+            elif any_oauth_configured() and st.session_state.get("oauth_browsing_guest"):
+                st.caption("Browsing as guest")
 
-        # Admin login/logout in sidebar
-        # with st.sidebar:
-        #    st_lottie(self.load_lottie_url("https://assets1.lottiefiles.com/packages/lf20_xyadoh9h.json"), height=200, key="sidebar_animation")
-        #    st.title("Hire Sense AI")
-        #    st.markdown("---")
-            
-            # Navigation buttons
+            # Navigation buttons (must stay inside with st.sidebar)
             for page_name in self.pages.keys():
                 if st.button(page_name, use_container_width=True):
                     cleaned_name = page_name.lower().replace(" ", "_").replace("🏠", "").replace("🔍", "").replace("📝", "").replace("📊", "").replace("🎯", "").replace("💬", "").replace("ℹ️", "").strip()
@@ -2956,20 +3412,17 @@ class ResumeApp:
                     admin_email_input = st.text_input("Email", key="admin_email_input")
                     admin_password = st.text_input("Password", type="password", key="admin_password_input")
                     if st.button("Login", key="login_button"):
-                            try:
-                                if verify_admin(admin_email_input, admin_password):
-                                    st.session_state.is_admin = True
-                                    st.session_state.current_admin_email = admin_email_input
-                                    log_admin_action(admin_email_input, "login")
-                                    st.success("Logged in successfully!")
-                                    st.rerun()
-                                else:
-                                    st.error("Invalid credentials")
-                            except Exception as e:
-                                st.error(f"Error during login: {str(e)}")
-        
-            # Display the repository notification in the sidebar
-            # self.show_repo_notification()
+                        try:
+                            if verify_admin(admin_email_input, admin_password):
+                                st.session_state.is_admin = True
+                                st.session_state.current_admin_email = admin_email_input
+                                log_admin_action(admin_email_input, "login")
+                                st.success("Logged in successfully!")
+                                st.rerun()
+                            else:
+                                st.error("Invalid credentials")
+                        except Exception as e:
+                            st.error(f"Error during login: {str(e)}")
 
         # Apply global styles (theme defaults to dark)
         self.apply_global_styles()

@@ -40,28 +40,85 @@ class ResumeAnalyzer:
         return best_match[0] if best_match[1] > 0.15 else 'unknown'
         
     def calculate_keyword_match(self, resume_text, required_skills):
-        resume_text = resume_text.lower()
-        found_skills = []
-        missing_skills = []
-        
-        for skill in required_skills:
-            skill_lower = skill.lower()
-            # Check for exact match
-            if skill_lower in resume_text:
-                found_skills.append(skill)
-            # Check for partial matches (e.g., "Python" in "Python programming")
-            elif any(skill_lower in phrase for phrase in resume_text.split('.')):
-                found_skills.append(skill)
-            else:
-                missing_skills.append(skill)
-                
-        match_score = (len(found_skills) / len(required_skills)) * 100 if required_skills else 0
-        
+        from utils.skill_normalization import match_required_skills_against_resume
+
+        found_skills, missing_skills, match_details = match_required_skills_against_resume(
+            resume_text, required_skills
+        )
+        match_score = (
+            (len(found_skills) / len(required_skills)) * 100 if required_skills else 0
+        )
+
         return {
-            'score': match_score,
-            'found_skills': found_skills,
-            'missing_skills': missing_skills
+            "score": match_score,
+            "found_skills": found_skills,
+            "missing_skills": missing_skills,
+            "match_details": match_details,
         }
+
+    def _merge_required_skills_with_priors(self, job_requirements):
+        """
+        Append top skills from Excel export for this target_role (Option C).
+
+        **Off by default** so JOB_ROLES stays the single source of truth unless you opt in.
+        Set HIRERESUME_ENABLE_ROLE_PRIORS=1 (or true/yes) to enable cohort priors.
+        HIRERESUME_DISABLE_ROLE_PRIORS=1 forces off even when ENABLE is set.
+        """
+        import os
+
+        static = list(job_requirements.get("required_skills", []))
+        enabled = os.environ.get("HIRERESUME_ENABLE_ROLE_PRIORS", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        forced_off = os.environ.get("HIRERESUME_DISABLE_ROLE_PRIORS", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if forced_off or not enabled:
+            return static, [], {
+                "skipped_priors": "role_priors_opt_in_only",
+                "hint": "Set HIRERESUME_ENABLE_ROLE_PRIORS=1 to use Excel export priors",
+            }
+
+        role = (
+            job_requirements.get("target_role")
+            or job_requirements.get("role")
+            or ""
+        )
+        cap = int(job_requirements.get("corpus_prior_skill_cap", 12))
+
+        try:
+            from utils.resume_corpus_insights import get_role_prior_skill_labels
+            from utils.skill_normalization import (
+                build_allowed_canonicals_for_job_role,
+                normalize_skill_term,
+            )
+        except Exception:
+            return static, [], {}
+
+        allowed = build_allowed_canonicals_for_job_role(job_requirements)
+        if not allowed:
+            return static, [], {"skipped_priors": "empty_role_skill_vocab"}
+
+        prior_labels, meta = get_role_prior_skill_labels(
+            role,
+            top_n=cap,
+            min_observations=2,
+            allowed_canonicals=allowed,
+        )
+        seen = {normalize_skill_term(s) for s in static}
+        added = []
+        for lbl in prior_labels:
+            cn = normalize_skill_term(lbl)
+            if not cn or cn in seen:
+                continue
+            seen.add(cn)
+            added.append(lbl)
+
+        return static + added, added, meta
         
     def check_resume_sections(self, text):
         text = text.lower()
@@ -118,28 +175,43 @@ class ResumeAnalyzer:
         return max(0, score), deductions
         
     def extract_text_from_pdf(self, file):
+        import io
+        import os
+        import tempfile
+
         try:
-            import PyPDF2
-            import io
-            
-            # Create a PDF reader object
-            # First make sure we have the file content as bytes
             if hasattr(file, 'read'):
-                # If it's already a file-like object, read it
                 file_content = file.read()
-                file.seek(0)  # Reset file pointer
+                file.seek(0)
             else:
-                # If it's already bytes
                 file_content = file
-                
-            # Create BytesIO from bytes content
+
+            # Layout-aware reading order (multi-column / non-linear PDF streams)
+            try:
+                from utils.pdf_text_layout import extract_resume_text_adaptive_columns
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(file_content)
+                    tmp_path = tmp.name
+                try:
+                    layout_text, _ = extract_resume_text_adaptive_columns(tmp_path)
+                    if layout_text and layout_text.strip():
+                        return layout_text
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+            except Exception:
+                pass
+
+            import PyPDF2
+
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
-            
-            # Extract text from all pages
             text = ""
             for page in pdf_reader.pages:
                 text += page.extract_text() + "\n"
-                
+
             return text
         except Exception as e:
             raise Exception(f"Error extracting text from PDF: {str(e)}")
@@ -462,9 +534,13 @@ class ResumeAnalyzer:
                     'suggestions': [f"This appears to be a {doc_type} document. Please upload a resume for ATS analysis."]
                 }
                 
-            # Calculate keyword match
-            required_skills = job_requirements.get('required_skills', [])
-            keyword_match = self.calculate_keyword_match(text, required_skills)
+            # Keyword match: static required skills + corpus priors for target_role (Excel export)
+            merged_skills, priors_added, prior_meta = self._merge_required_skills_with_priors(
+                job_requirements
+            )
+            keyword_match = self.calculate_keyword_match(text, merged_skills)
+            keyword_match["corpus_priors_added"] = priors_added
+            keyword_match["corpus_prior_meta"] = prior_meta
             
             # Extract all resume sections
             education = self.extract_education(text)
