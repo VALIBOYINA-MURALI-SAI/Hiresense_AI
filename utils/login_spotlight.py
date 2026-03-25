@@ -1,7 +1,7 @@
 """
-In-app social proof for the OAuth login / landing column: no external form required.
-Uses feedback/feedback.db and main SQLite stats (resume + AI analyses).
-Optional env fallbacks when counts are zero — set explicitly; never invented by code.
+In-app social proof for the OAuth login / landing column.
+Uses feedback/feedback.db for trust + experience scores only.
+Optional env / Secrets fallbacks when there is no feedback data yet.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from config.database import get_ai_analysis_stats, get_database_connection
+from config.database import get_ai_analysis_stats
 
 
 def _env_float(key: str) -> float | None:
@@ -83,37 +83,13 @@ def _load_feedback_aggregates() -> tuple[int, float | None, float | None]:
         return 0, None, None
 
 
-def _standard_analysis_count_avg_ats() -> tuple[int, float | None]:
-    conn = get_database_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='resume_analysis'"
-        )
-        if not cur.fetchone():
-            return 0, None
-        cur.execute("SELECT COUNT(*), AVG(ats_score) FROM resume_analysis")
-        row = cur.fetchone()
-        cnt = int(row[0] or 0)
-        avg = row[1]
-        if cnt == 0:
-            return 0, None
-        return cnt, round(float(avg), 1)
-    except Exception:
-        return 0, None
-    finally:
-        conn.close()
-
-
 def render_login_spotlight_block() -> None:
-    """Metrics card for the sign-in landing column (Streamlit)."""
+    """Two prominent score cards for the sign-in landing column."""
     fb_n, trust_data, exp_data = _load_feedback_aggregates()
-    std_n, avg_ats = _standard_analysis_count_avg_ats()
     ai_stats = get_ai_analysis_stats()
     ai_n = int(ai_stats.get("total_analyses") or 0)
     ai_avg = float(ai_stats.get("average_score") or 0)
 
-    # Optional display overrides when you have no rows yet (you set these explicitly).
     env_trust = _spotlight_float(
         "HIRERESUME_LOGIN_SPOTLIGHT_TRUST_PCT",
         "hireresume_login_spotlight_trust_pct",
@@ -122,69 +98,132 @@ def render_login_spotlight_block() -> None:
         "HIRERESUME_LOGIN_SPOTLIGHT_EXPERIENCE_PCT",
         "hireresume_login_spotlight_experience_pct",
     )
-    env_ats = _spotlight_float(
-        "HIRERESUME_LOGIN_SPOTLIGHT_AVG_ATS",
-        "hireresume_login_spotlight_avg_ats",
-    )
 
     trust_val = trust_data if fb_n > 0 else env_trust
     exp_val = exp_data if fb_n > 0 else env_exp
-    ats_val = avg_ats if std_n > 0 else env_ats
 
-    st.markdown("**Community snapshot**")
-    st.caption(
-        "Pulled from this app’s **Feedback** page and **saved resume analyses** on this server."
+    if trust_val is not None:
+        t_num = f"{trust_val:.0f}<span style='font-size:0.55em;font-weight:700;opacity:0.85'>%</span>"
+        t_foot = "% of responses with 4–5★ overall."
+        if fb_n:
+            t_foot += f" <strong>{fb_n}</strong> response(s)."
+        else:
+            t_foot += " Configured highlight."
+        t_dim = False
+    else:
+        t_num = "—"
+        t_foot = (
+            "No data yet — use Feedback after sign-in, or set "
+            "<code>HIRERESUME_LOGIN_SPOTLIGHT_TRUST_PCT</code>."
+        )
+        t_dim = True
+
+    if exp_val is not None:
+        e_num = f"{exp_val:.0f}<span style='font-size:0.5em;font-weight:700;opacity:0.8'>/100</span>"
+        e_foot = "Blend of rating, ease of use, and feature satisfaction."
+        if fb_n:
+            e_foot += f" <strong>{fb_n}</strong> response(s)."
+        else:
+            e_foot += " Configured highlight."
+        e_dim = False
+    else:
+        e_num = "—"
+        e_foot = (
+            "No data yet — use Feedback after sign-in, or set "
+            "<code>HIRERESUME_LOGIN_SPOTLIGHT_EXPERIENCE_PCT</code>."
+        )
+        e_dim = True
+
+    def cell(dim: bool, kicker: str, num: str, foot: str) -> str:
+        cls = "hire-ls-card" + (" hire-ls-card-dim" if dim else "")
+        return f"""<div class="{cls}">
+            <div class="hire-ls-kicker">{kicker}</div>
+            <div class="hire-ls-num">{num}</div>
+            <div class="hire-ls-foot">{foot}</div>
+        </div>"""
+
+    st.markdown(
+        f"""
+        <style>
+        .hire-ls-wrap {{ margin-top: 0.35rem; }}
+        .hire-ls-title {{
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text);
+            margin: 0 0 0.15rem 0;
+            letter-spacing: -0.02em;
+        }}
+        .hire-ls-sub {{
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin: 0 0 0.85rem 0;
+            line-height: 1.45;
+        }}
+        .hire-ls-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.85rem;
+        }}
+        @media (max-width: 640px) {{
+            .hire-ls-grid {{ grid-template-columns: 1fr; }}
+        }}
+        .hire-ls-card {{
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 1rem 1.1rem 1.05rem;
+            border-left: 4px solid #22c55e;
+            box-shadow: 0 6px 28px rgba(0, 0, 0, 0.12);
+        }}
+        .hire-ls-card-dim {{
+            border-left-color: rgba(148, 163, 184, 0.55);
+        }}
+        .hire-ls-kicker {{
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: var(--muted);
+            font-weight: 700;
+            margin-bottom: 0.35rem;
+        }}
+        .hire-ls-num {{
+            font-size: clamp(1.85rem, 4.2vw, 2.45rem);
+            font-weight: 800;
+            color: var(--text);
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+        }}
+        .hire-ls-foot {{
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-top: 0.5rem;
+            line-height: 1.4;
+        }}
+        </style>
+        <div class="hire-ls-wrap">
+            <p class="hire-ls-title">Community snapshot</p>
+            <p class="hire-ls-sub">Trust and experience scores from this app’s <strong>Feedback</strong> page — large type for quick reading.</p>
+            <div class="hire-ls-grid">
+                {cell(t_dim, "Trust signal", t_num, t_foot)}
+                {cell(e_dim, "Experience score", e_num, e_foot)}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if trust_val is not None:
-            st.metric(
-                label="Trust signal",
-                value=f"{trust_val:.0f}%",
-                help="Share of in-app feedback with overall rating 4★ or 5★. "
-                "Or set HIRERESUME_LOGIN_SPOTLIGHT_TRUST_PCT when you have no responses yet.",
-            )
-        else:
-            st.metric(label="Trust signal", value="—", help="Submit feedback in-app to populate.")
-    with c2:
-        if exp_val is not None:
-            st.metric(
-                label="Experience score",
-                value=f"{exp_val:.0f}/100",
-                help="From average of rating, usability, and satisfaction (1–5 each), scaled to 100. "
-                "Or HIRERESUME_LOGIN_SPOTLIGHT_EXPERIENCE_PCT.",
-            )
-        else:
-            st.metric(label="Experience score", value="—", help="Submit feedback in-app to populate.")
-    with c3:
-        if ats_val is not None:
-            st.metric(
-                label="Avg. ATS (standard)",
-                value=f"{ats_val:.0f}",
-                help="Mean ATS score across saved standard analyses on this server. "
-                "Or HIRERESUME_LOGIN_SPOTLIGHT_AVG_ATS.",
-            )
-        else:
-            st.metric(
-                label="Avg. ATS (standard)",
-                value="—",
-                help="Run the standard analyzer and save, or set HIRERESUME_LOGIN_SPOTLIGHT_AVG_ATS.",
-            )
 
     bits = []
     if fb_n:
-        bits.append(f"**{fb_n}** feedback response(s)")
-    if std_n:
-        bits.append(f"**{std_n}** standard analysis record(s)")
+        bits.append(f"{fb_n} feedback response(s)")
     if ai_n:
         bits.append(
-            f"**{ai_n}** AI analysis run(s){f', mean resume score **{ai_avg:.0f}**/100' if ai_avg else ''}"
+            f"{ai_n} AI analysis run(s)"
+            + (f", mean resume score {ai_avg:.0f}/100" if ai_avg else "")
         )
     if bits:
         st.caption(" · ".join(bits))
-    else:
+    elif not trust_val and not exp_val:
         st.caption(
-            "No feedback or analyses stored yet. Use **Feedback** after sign-in, or set optional "
-            "`HIRERESUME_LOGIN_SPOTLIGHT_*` env vars for static highlights (see `.env.example`)."
+            "Optional env: `HIRERESUME_LOGIN_SPOTLIGHT_TRUST_PCT` and "
+            "`HIRERESUME_LOGIN_SPOTLIGHT_EXPERIENCE_PCT` (see `.env.example`)."
         )

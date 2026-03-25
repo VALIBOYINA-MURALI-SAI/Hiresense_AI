@@ -198,6 +198,8 @@ Visit **[Google AI Studio – Gemini API Access](https://aistudio.google.com/app
 
 Add the same logical settings in **App settings → Secrets** (TOML). **`GOOGLE_API_KEY`** and **`OPENROUTER_API_KEY`** in Secrets are picked up by the analyzer. Admin and OAuth keys are **Secrets-only** (not read from `.env` on the server). See **Environment & secrets reference** below.
 
+If the deploy logs show **Python 3.14** and odd import errors (e.g. `KeyError` during `import bootstrap_env`), open **App settings → Advanced settings** and set **Python version** to **3.12** (or 3.11), then redeploy if needed.
+
 
 6. **Run the application:**
 
@@ -347,7 +349,7 @@ Implementation: `utils/resume_corpus_insights.py` (used by `resume_analytics/ana
 
 ### Evaluation & feedback (in-app)
 
-The **Feedback** page stores responses in `feedback/feedback.db`. Saved **standard** analyses contribute to `resume_data.db` (`resume_analysis`). The OAuth **login** page can show a short **Community snapshot** (trust / experience / average ATS) from that data; optional env keys `HIRERESUME_LOGIN_SPOTLIGHT_*` fill gaps when counts are zero (see `.env.example`).
+The **Feedback** page stores responses in `feedback/feedback.db`. The OAuth **login** page can show a **Community snapshot** (trust + experience scores) from that data; optional env keys `HIRERESUME_LOGIN_SPOTLIGHT_TRUST_PCT` and `HIRERESUME_LOGIN_SPOTLIGHT_EXPERIENCE_PCT` fill gaps when counts are zero (see `.env.example`).
 
 **Automated regression tests** (`tests/` — PDF layout + skill normalization):
 
@@ -384,6 +386,8 @@ If the terminal shows **`ssl_transport_security`** / **`unable to get local issu
 | `HIRERESUME_ENABLE_ROLE_PRIORS` | `.env` or process env | Optional | `1` / `true` / `yes` — corpus skill priors |
 | `HIRERESUME_DISABLE_ROLE_PRIORS` | `.env` or process env | Optional | Forces priors off |
 | `HIRERESUME_REQUIRE_USER_OAUTH` | `.env` or process env | Optional | `1` / `true` / `yes` — require OAuth if configured |
+| `HIRERESUME_SKIP_LOGIN` | `.env` or process env | Optional | `1` / `true` — **local only**: skip sign-in page; do not set on Cloud |
+| `OAUTH_REDIRECT_URI` | `.env` or process env | Optional | Overrides secrets so localhost redirect wins (see OAuth section) |
 | `RESUME_CORPUS_ROOT` | `.env` or process env | Optional | Override folder for corpus / Excel export discovery |
 | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GRPC_DEFAULT_SSL_ROOTS_FILE_PATH` | `.env` or system env | Optional | TLS / gRPC (Gemini); app may default these via **certifi** if unset |
 | `HIRERESUME_SKIP_CA_BUNDLE` | `.env` or process env | Optional | `1` / `true` — skip bootstrap TLS helpers entirely |
@@ -430,6 +434,8 @@ oauth_github_client_secret = "..."
 ```
 
 To **require** OAuth when credentials are present (no guest access), set `require_user_oauth = true` in secrets or the environment variable `HIRERESUME_REQUIRE_USER_OAUTH=1`.
+
+**Local testing when secrets only list the Cloud URL:** set **`OAUTH_REDIRECT_URI=http://localhost:8501/`** in `.env` so the auth flow stays on your machine. If you prefer to skip sign-in entirely while developing, set **`HIRERESUME_SKIP_LOGIN=1`** in `.env` (never enable this on the deployed Cloud app).
 
 ### Missing or broken dependencies
 

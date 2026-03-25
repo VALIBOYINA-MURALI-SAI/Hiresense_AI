@@ -5,8 +5,9 @@ import os
 
 try:
     import bootstrap_env  # noqa: F401 — local: .env + TLS defaults before utils / gRPC
-except ModuleNotFoundError:
-    pass  # Streamlit Cloud / clones without bootstrap_env.py (file may be gitignored)
+except Exception:
+    # Python 3.14+ / importlib may raise KeyError here; missing module is not the only case.
+    pass  # Streamlit Cloud: optional; clones without bootstrap_env.py
 
 import time
 try:
@@ -73,6 +74,29 @@ st.set_page_config(
     page_icon="🚀",
     layout="wide"
 )
+
+
+def _hireresume_skip_login_env() -> bool:
+    """
+    Local dev only: skip the OAuth login gate entirely.
+    Use when Streamlit secrets point OAuth at Cloud but you run on localhost.
+    Set HIRERESUME_SKIP_LOGIN=1 in .env (never enable this on production Cloud).
+    """
+    for key in ("HIRERESUME_SKIP_LOGIN", "HIRERESUME_BYPASS_OAUTH"):
+        v = os.environ.get(key, "").strip().lower()
+        if v in ("1", "true", "yes", "on"):
+            return True
+    return False
+
+
+def _strip_oauth_query_params():
+    """Remove OAuth redirect params so stale ?code= from a wrong host does not linger."""
+    try:
+        for k in ("code", "state", "error", "error_description", "scope"):
+            if k in st.query_params:
+                del st.query_params[k]
+    except Exception:
+        pass
 
 
 class ResumeApp:
@@ -3177,6 +3201,8 @@ class ResumeApp:
             return False
 
     def _oauth_access_granted(self) -> bool:
+        if _hireresume_skip_login_env():
+            return True
         if st.session_state.get("oauth_user"):
             return True
         if not any_oauth_configured():
@@ -3415,12 +3441,21 @@ class ResumeApp:
 
     def main(self):
         """Main application entry point"""
-        self._handle_oauth_callback()
+        if _hireresume_skip_login_env():
+            _strip_oauth_query_params()
+        else:
+            self._handle_oauth_callback()
         if not self._oauth_access_granted():
             self.render_oauth_login_page()
             return
 
         st.session_state["_hire_ui_oauth_login"] = False
+        if (
+            _hireresume_skip_login_env()
+            and any_oauth_configured()
+            and not st.session_state.get("oauth_user")
+        ):
+            st.session_state.oauth_browsing_guest = True
 
         # Theme (default to dark)
         if 'theme' not in st.session_state:

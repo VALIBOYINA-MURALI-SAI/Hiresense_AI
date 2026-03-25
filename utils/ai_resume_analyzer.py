@@ -3,7 +3,7 @@ from pathlib import Path
 
 try:
     import bootstrap_env  # noqa: F401 — local: .env + CA paths before Gemini
-except ModuleNotFoundError:
+except Exception:
     pass
 
 import streamlit as st

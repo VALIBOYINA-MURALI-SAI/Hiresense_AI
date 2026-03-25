@@ -2,7 +2,6 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 import pandas as pd
-import time
 
 class FeedbackManager:
     def __init__(self):
@@ -71,261 +70,209 @@ class FeedbackManager:
             'total_responses': len(df)
         }
 
-    def render_feedback_form(self):
-        """Render the feedback form with theme-aware styling"""
-        st.markdown("""
+    def _inject_feedback_page_styles(self):
+        st.markdown(
+            """
             <style>
-            @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css');
-            
-            .feedback-container {
+            .hire-fb-hero, .hire-fb-panel {
+                max-width: 640px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            .hire-fb-hero {
+                border-bottom: 1px solid var(--card-border);
+                padding: 0 0 0.75rem 0;
+                margin-bottom: 1rem;
+            }
+            .hire-fb-hero h3 {
+                margin: 0;
+                font-size: 1.25rem;
+                font-weight: 700;
+                color: var(--text);
+                letter-spacing: -0.02em;
+            }
+            .hire-fb-panel {
                 background: var(--card-bg);
-                backdrop-filter: blur(10px);
-                padding: 30px;
-                border-radius: 20px;
-                margin: 20px 0;
                 border: 1px solid var(--card-border);
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            }
-            
-            .feedback-header {
-                color: var(--text-primary);
-                font-size: 1.5em;
-                font-weight: 600;
-                margin-bottom: 25px;
-                text-align: center;
-                padding: 15px;
-                background: var(--primary-gradient);
                 border-radius: 12px;
-                box-shadow: 0 4px 15px rgba(33, 150, 243, 0.2);
+                padding: 0.85rem 1rem 0.95rem;
+                margin-bottom: 0.65rem;
             }
-            
-            .feedback-section {
-                margin: 20px 0;
-                padding: 20px;
-                border-radius: 15px;
-                background: var(--background-light);
-                border: 1px solid var(--card-border);
-                transition: transform 0.3s ease, box-shadow 0.3s ease;
-            }
-            
-            .feedback-section:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            }
-            
-            .feedback-label {
-                color: var(--text-primary);
-                font-size: 1.1em;
-                font-weight: 500;
-                margin-bottom: 10px;
-            }
-            
-            .star-rating {
-                font-size: 24px;
-                color: #FFD700;
-                cursor: pointer;
-                transition: transform 0.2s ease;
-            }
-            
-            .star-rating:hover {
-                transform: scale(1.1);
-            }
-            
-            .rating-container {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                margin: 15px 0;
-            }
-            
-            .submit-button {
-                background: var(--primary-gradient);
-                color: white;
-                padding: 12px 25px;
-                border: none;
-                border-radius: 8px;
+            .hire-fb-panel-title {
+                font-size: 0.88rem;
                 font-weight: 600;
-                cursor: pointer;
-                transition: all 0.3s ease;
+                color: var(--muted);
                 text-transform: uppercase;
-                letter-spacing: 1px;
-                width: 100%;
-                margin-top: 20px;
+                letter-spacing: 0.06em;
+                margin: 0 0 0.5rem 0;
             }
-            
-            .submit-button:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 5px 15px rgba(33, 150, 243, 0.3);
+            .hire-fb-val-row {
+                margin: 0.35rem 0 0 0;
             }
-            
-            .textarea-container {
-                background: var(--background-light);
-                border: 1px solid var(--card-border);
+            .hire-fb-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 2.1rem;
+                padding: 0.2rem 0.55rem;
                 border-radius: 8px;
-                padding: 10px;
-                margin-top: 10px;
+                font-weight: 800;
+                font-size: 0.95rem;
+                color: #fff;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.12);
             }
-            
-            .textarea-container textarea {
-                width: 100%;
-                min-height: 100px;
-                background: transparent;
-                border: none;
-                color: var(--text-primary);
-                font-size: 1em;
-                resize: vertical;
+            .hire-fb-badge.b1, .hire-fb-badge.b2 {
+                background: linear-gradient(135deg, #b91c1c, #ef4444);
             }
-
-            /* Style for Streamlit's default slider labels */
-            .stSlider label {
-                color: var(--text-primary) !important;
+            .hire-fb-badge.b3 {
+                background: linear-gradient(135deg, #ca8a04, #facc15);
+                color: #171717 !important;
+            }
+            .hire-fb-badge.b4, .hire-fb-badge.b5 {
+                background: linear-gradient(135deg, #15803d, #22c55e);
+            }
+            /* Select-slider: red → yellow → green track */
+            .hire-fb-rate div[data-testid="stSelectSlider"] [data-baseweb="slider"] [role="slider"] {
+                background-color: #fafafa !important;
+                border: 3px solid var(--card-bg) !important;
+                box-shadow: 0 0 0 2px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.18) !important;
+                width: 22px !important;
+                height: 22px !important;
+            }
+            .hire-fb-rate div[data-testid="stSelectSlider"] [data-baseweb="slider"] [data-baseweb="track"] {
+                border-radius: 999px !important;
+                height: 12px !important;
+                background: rgba(0,0,0,0.08) !important;
+            }
+            .hire-fb-rate div[data-testid="stSelectSlider"] [data-baseweb="slider"] [data-baseweb="track"] > div:first-child {
+                border-radius: 999px !important;
+                background: linear-gradient(90deg, #ef4444 0%, #eab308 50%, #22c55e 100%) !important;
+            }
+            /* Let full R→Y→G show (some builds add a second fill layer) */
+            .hire-fb-rate div[data-testid="stSelectSlider"] [data-baseweb="slider"] [data-baseweb="track"] > div:not(:first-child) {
+                background: transparent !important;
+            }
+            .hire-fb-rate div[data-testid="stSelectSlider"] [data-baseweb="slider"] [data-baseweb="tick"] {
+                font-size: 0.8rem !important;
+                font-weight: 700 !important;
+                color: var(--text) !important;
+            }
+            .hire-fb-rate div[data-testid="stSelectSlider"] {
+                padding-top: 0.1rem;
+                padding-bottom: 0.05rem;
             }
             </style>
-            """, unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True,
+        )
 
-        st.markdown('<div class="feedback-container">', unsafe_allow_html=True)
-        st.markdown('<h2 class="feedback-header">📝 Share Your Feedback</h2>', unsafe_allow_html=True)
+    def _rating_dragger(self, *, panel_title: str, key: str) -> int:
+        """Discrete 1–5 rating: R→Y→G track + numeric badge (no stars)."""
+        st.markdown('<div class="hire-fb-panel">', unsafe_allow_html=True)
+        st.markdown(
+            f'<p class="hire-fb-panel-title">{panel_title}</p>', unsafe_allow_html=True
+        )
+        st.markdown('<div class="hire-fb-rate">', unsafe_allow_html=True)
+        value = st.select_slider(
+            " ",
+            options=[1, 2, 3, 4, 5],
+            value=5,
+            format_func=lambda n: str(n),
+            key=key,
+            label_visibility="collapsed",
+            width="stretch",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        v = int(value)
+        st.markdown(
+            f'<p class="hire-fb-val-row"><span class="hire-fb-badge b{v}">{v}</span></p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        return v
 
-        # Overall Rating
-        st.markdown('<div class="feedback-section">', unsafe_allow_html=True)
-        st.markdown('<label class="feedback-label">Overall Experience Rating</label>', unsafe_allow_html=True)
-        rating = st.slider("Overall Rating", 1, 5, 5, help="Rate your overall experience with the app", label_visibility="collapsed")
-        st.markdown(f'<div class="rating-container">{"⭐" * rating}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    def render_feedback_form(self):
+        """Modern feedback form aligned with app chrome (cards + accent)."""
+        self._inject_feedback_page_styles()
 
-        # Usability Score
-        st.markdown('<div class="feedback-section">', unsafe_allow_html=True)
-        st.markdown('<label class="feedback-label">How easy was it to use our app?</label>', unsafe_allow_html=True)
-        usability_score = st.slider("Usability Score", 1, 5, 5, help="Rate the app's ease of use", label_visibility="collapsed")
-        st.markdown(f'<div class="rating-container">{"⭐" * usability_score}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="hire-fb-hero"><h3>Feedback</h3></div>',
+            unsafe_allow_html=True,
+        )
 
-        # Feature Satisfaction
-        st.markdown('<div class="feedback-section">', unsafe_allow_html=True)
-        st.markdown('<label class="feedback-label">How satisfied are you with our features?</label>', unsafe_allow_html=True)
-        feature_satisfaction = st.slider("Feature Satisfaction", 1, 5, 5, help="Rate your satisfaction with the app's features", label_visibility="collapsed")
-        st.markdown(f'<div class="rating-container">{"⭐" * feature_satisfaction}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        rating = self._rating_dragger(panel_title="Overall", key="fb_rating")
+        usability_score = self._rating_dragger(panel_title="Ease of use", key="fb_usability")
+        feature_satisfaction = self._rating_dragger(panel_title="Features", key="fb_features")
 
-        # Text Feedback
-        st.markdown('<div class="feedback-section">', unsafe_allow_html=True)
-        st.markdown('<label class="feedback-label">What features would you like to see added?</label>', unsafe_allow_html=True)
-        missing_features = st.text_area("Missing Features", placeholder="Share your feature requests...", label_visibility="collapsed")
+        st.markdown('<div class="hire-fb-panel">', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="hire-fb-panel-title">Comments · optional</p>',
+            unsafe_allow_html=True,
+        )
+        comments = st.text_area(
+            "Comments",
+            placeholder="Optional notes…",
+            label_visibility="collapsed",
+            height=88,
+            key="fb_comments",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown('<label class="feedback-label">How can we improve?</label>', unsafe_allow_html=True)
-        improvement_suggestions = st.text_area("Improvement Suggestions", placeholder="Your suggestions for improvement...", label_visibility="collapsed")
-
-        st.markdown('<label class="feedback-label">Tell us about your experience</label>', unsafe_allow_html=True)
-        user_experience = st.text_area("User Experience", placeholder="Share your experience with us...", label_visibility="collapsed")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Submit Button
-        if st.button("Submit Feedback", key="submit_feedback"):
+        if st.button(
+            "Submit feedback",
+            type="primary",
+            width="stretch",
+            key="submit_feedback",
+        ):
             try:
-                # Create progress bar
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                # Simulate processing with animation
-                for i in range(100):
-                    progress_bar.progress(i + 1)
-                    if i < 30:
-                        status_text.text("Processing feedback... 📝")
-                    elif i < 60:
-                        status_text.text("Analyzing responses... 🔍")
-                    elif i < 90:
-                        status_text.text("Saving to database... 💾")
-                    else:
-                        status_text.text("Finalizing... ✨")
-                    time.sleep(0.01)
-
-                # Save feedback
-                feedback_data = {
-                    'rating': rating,
-                    'usability_score': usability_score,
-                    'feature_satisfaction': feature_satisfaction,
-                    'missing_features': missing_features,
-                    'improvement_suggestions': improvement_suggestions,
-                    'user_experience': user_experience
-                }
-                self.save_feedback(feedback_data)
-                
-                # Clear progress elements
-                progress_bar.empty()
-                status_text.empty()
-                
-                # Show success message with animation
-                success_container = st.empty()
-                success_container.markdown("""
-                    <div style="text-align: center; padding: 20px; background: linear-gradient(90deg, rgba(76, 175, 80, 0.1), rgba(33, 150, 243, 0.1)); border-radius: 10px;">
-                        <h2 style="color: #4CAF50;">Thank You! 🎉</h2>
-                        <p style="color: var(--text-primary);">Your feedback helps us improve Smart Resume AI</p>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Show balloons animation
+                with st.spinner("Saving your feedback…"):
+                    feedback_data = {
+                        "rating": rating,
+                        "usability_score": usability_score,
+                        "feature_satisfaction": feature_satisfaction,
+                        "missing_features": "",
+                        "improvement_suggestions": "",
+                        "user_experience": comments or "",
+                    }
+                    self.save_feedback(feedback_data)
+                st.success("Thank you — your feedback was saved. It helps us improve Hire Sense AI.")
                 st.balloons()
-                
-                # Keep success message visible
-                time.sleep(2)
-                
             except Exception as e:
-                st.error(f"Error submitting feedback: {str(e)}")
+                st.error(f"Could not save feedback: {str(e)}")
 
     def render_feedback_stats(self):
-        """Render feedback statistics with theme-aware styling"""
+        """Summary metrics + simple chart."""
+        self._inject_feedback_page_styles()
         stats = self.get_feedback_stats()
-        
-        st.markdown("""
-            <div style="text-align: center; padding: 15px; background: linear-gradient(90deg, rgba(76, 175, 80, 0.1), rgba(33, 150, 243, 0.1)); border-radius: 10px; margin-bottom: 20px;">
-                <h3 style="color: var(--text-primary);">Feedback Overview 📊</h3>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        cols = st.columns(4)
-        metrics = [
-            {"label": "Total Responses", "value": f"{stats['total_responses']:,}", "delta": "↗"},
-            {"label": "Avg Rating", "value": f"{stats['avg_rating']:.1f}/5.0", "delta": "⭐"},
-            {"label": "Usability Score", "value": f"{stats['avg_usability']:.1f}/5.0", "delta": "🎯"},
-            {"label": "Satisfaction", "value": f"{stats['avg_satisfaction']:.1f}/5.0", "delta": "😊"}
-        ]
-        
-        # Define CSS for the metric cards using theme variables
-        st.markdown("""
-            <style>
-            .metric-card {
-                background: var(--card-bg);
-                padding: 15px;
-                border-radius: 8px;
-                text-align: center;
-                border: 1px solid var(--card-border);
-                transition: transform 0.3s ease;
-            }
-            .metric-card:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            }
-            .metric-label {
-                color: var(--text-secondary);
-                font-size: 0.9em;
-            }
-            .metric-value {
-                font-size: 1.5em;
-                color: var(--primary-color);
-                margin: 5px 0;
-            }
-            .metric-delta {
-                color: var(--text-primary);
-                font-size: 1.2em;
-            }
-            </style>
-        """, unsafe_allow_html=True)
 
-        for col, metric in zip(cols, metrics):
-            col.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-label">{metric['label']}</div>
-                    <div class="metric-value">{metric['value']}</div>
-                    <div class="metric-delta">{metric['delta']}</div>
-                </div>
-            """, unsafe_allow_html=True)
+        st.markdown(
+            '<div class="hire-fb-hero"><h3>Stats</h3></div>',
+            unsafe_allow_html=True,
+        )
+
+        if stats["total_responses"] == 0:
+            st.info("No responses yet. Use **Submit Feedback** to add the first one.")
+            return
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Responses", f"{int(stats['total_responses']):,}")
+        with c2:
+            st.metric("Avg rating", f"{stats['avg_rating']:.2f}", help="Overall 1–5")
+        with c3:
+            st.metric("Ease of use", f"{stats['avg_usability']:.2f}", help="Usability 1–5")
+        with c4:
+            st.metric("Features", f"{stats['avg_satisfaction']:.2f}", help="Satisfaction 1–5")
+
+        st.markdown("<br/>", unsafe_allow_html=True)
+        chart_df = pd.DataFrame(
+            {
+                "Area": ["Overall", "Ease of use", "Features"],
+                "Average (out of 5)": [
+                    round(stats["avg_rating"], 2),
+                    round(stats["avg_usability"], 2),
+                    round(stats["avg_satisfaction"], 2),
+                ],
+            }
+        )
+        st.bar_chart(chart_df.set_index("Area"), width="stretch", height=280)
