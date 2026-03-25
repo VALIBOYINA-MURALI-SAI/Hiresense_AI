@@ -1,4 +1,4 @@
-﻿"""
+"""
 Hire Sense AI - Main Application
 """
 import time
@@ -28,7 +28,7 @@ from config.courses import COURSES_BY_CATEGORY, RESUME_VIDEOS, INTERVIEW_VIDEOS,
 from config.job_roles import JOB_ROLES
 from config.database import (
     get_database_connection, save_resume_data, save_analysis_data,
-    init_database, verify_admin, log_admin_action, save_ai_analysis_data,
+    init_database, ensure_initial_admin, verify_admin, log_admin_action, save_ai_analysis_data,
     get_ai_analysis_stats, reset_ai_analysis_stats, get_detailed_ai_analysis_stats
 )
 from utils.ai_resume_analyzer import AIResumeAnalyzer
@@ -109,6 +109,15 @@ class ResumeApp:
 
         # Initialize database
         init_database()
+        # Streamlit Cloud (and any fresh clone): resume_data.db is not in git — seed admin from app secrets once.
+        try:
+            if "admin_email" in st.secrets and "admin_password" in st.secrets:
+                ensure_initial_admin(
+                    str(st.secrets["admin_email"]).strip(),
+                    str(st.secrets["admin_password"]),
+                )
+        except Exception:
+            pass
 
         # Load external CSS
         with open('style/style.css') as f:

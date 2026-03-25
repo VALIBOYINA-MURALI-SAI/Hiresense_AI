@@ -256,6 +256,22 @@ def get_all_resume_data():
     finally:
         conn.close()
 
+def ensure_initial_admin(email, password):
+    """Create first admin row if table is empty (e.g. Streamlit Cloud: fresh DB, no gitignored resume_data.db)."""
+    if not email or not password:
+        return
+    conn = get_database_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('SELECT COUNT(*) FROM admin')
+        if cursor.fetchone()[0] > 0:
+            return
+        cursor.execute('INSERT INTO admin (email, password) VALUES (?, ?)', (email, password))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def verify_admin(email, password):
     """Verify admin credentials"""
     conn = get_database_connection()
