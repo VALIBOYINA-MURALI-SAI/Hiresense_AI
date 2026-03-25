@@ -88,7 +88,7 @@ class LinkedInScraper:
             submit = st.form_submit_button(
                 label='Search LinkedIn Jobs',
                 type='primary',
-                use_container_width=True
+                width="stretch"
             )
             add_vertical_space(1)
         

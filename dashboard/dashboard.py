@@ -546,7 +546,7 @@ class DashboardManager:
                 # Display filtered data
                 st.dataframe(
                     filtered_df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
                 
@@ -607,7 +607,7 @@ class DashboardManager:
             
             with st.container():
                 st.markdown('<div class="admin-logs">', unsafe_allow_html=True)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width="stretch", hide_index=True)
                 # ... (download button) ...
                 st.markdown('</div>', unsafe_allow_html=True)
         else:
@@ -819,13 +819,13 @@ class DashboardManager:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             avg_ats = float(stats['Avg ATS Score'].rstrip('%'))
             fig = self.create_enhanced_ats_gauge(avg_ats, colors)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             st.markdown('</div>', unsafe_allow_html=True)
 
         with col2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             fig = self.create_skill_distribution_chart(colors)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             st.markdown('</div>', unsafe_allow_html=True)
 
         # Additional Analytics
@@ -834,13 +834,13 @@ class DashboardManager:
         with col1:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             fig = self.create_submission_trends_chart(colors)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             st.markdown('</div>', unsafe_allow_html=True)
 
         with col2:
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             fig = self.create_job_category_chart(colors)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             st.markdown('</div>', unsafe_allow_html=True)
 
         # Key Insights Section

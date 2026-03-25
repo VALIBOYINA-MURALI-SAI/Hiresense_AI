@@ -21,6 +21,7 @@ from ui_components import (
     render_suggestions_section
 )
 from feedback.feedback import FeedbackManager
+from utils.login_spotlight import render_login_spotlight_block
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
 from docx import Document
@@ -1560,7 +1561,7 @@ class ResumeApp:
                 # Add a prominent analyze button
                 analyze_standard = st.button("🔍 Analyze My Resume",
                                     type="primary",
-                                    use_container_width=True,
+                                    width="stretch",
                                     key="analyze_standard_button")
 
                 if analyze_standard:
@@ -2075,7 +2076,7 @@ class ResumeApp:
                                 margin=dict(l=10, r=10, t=30, b=10)
                             )
 
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width="stretch")
 
                         # Display model usage with enhanced visualization
                         if ai_stats["model_usage"]:
@@ -2124,7 +2125,7 @@ class ResumeApp:
                                 }
                             )
 
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width="stretch")
 
                         # Display top job roles with enhanced visualization
                         if ai_stats["top_job_roles"]:
@@ -2175,7 +2176,7 @@ class ResumeApp:
                                 coloraxis_showscale=False
                             )
 
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width="stretch")
 
                             # Add a timeline chart for analysis over time (mock
                             # data for now)
@@ -2254,7 +2255,7 @@ class ResumeApp:
                                 )
                             )
 
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width="stretch")
 
                         # Display score distribution if available
                         if ai_stats["score_distribution"]:
@@ -2376,7 +2377,7 @@ class ResumeApp:
                             <div style='background: linear-gradient(135deg, #1e3c72, #2a5298); padding: 20px; border-radius: 15px; margin: 10px 0; box-shadow: 0 5px 15px rgba(0,0,0,0.2);'>
                             """, unsafe_allow_html=True)
 
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width="stretch")
 
                             # Add descriptive text below the chart
                             st.markdown("""
@@ -2585,7 +2586,7 @@ class ResumeApp:
                 # Add a prominent analyze button
                 analyze_ai = st.button("🤖 Analyze with AI",
                                 type="primary",
-                                use_container_width=True,
+                                width="stretch",
                                 key="analyze_ai_button")
 
                 if analyze_ai:
@@ -2697,7 +2698,6 @@ class ResumeApp:
                                     st.markdown("## Full Analysis Report")
                                     
                                     # Get current date
-                                    from datetime import datetime
                                     current_date = datetime.now().strftime("%B %d, %Y")
                                     
                                     # Create a modern styled header for the report
@@ -2752,7 +2752,7 @@ class ResumeApp:
                                             margin=dict(l=20, r=20, t=50, b=20),
                                         )
                                         
-                                        st.plotly_chart(fig1, use_container_width=True)
+                                        st.plotly_chart(fig1, width="stretch")
                                         
                                         status = "Excellent" if resume_score >= 80 else "Good" if resume_score >= 60 else "Needs Improvement"
                                         st.markdown(f"<div style='text-align: center; font-weight: bold;'>{status}</div>", unsafe_allow_html=True)
@@ -2789,7 +2789,7 @@ class ResumeApp:
                                             margin=dict(l=20, r=20, t=50, b=20),
                                         )
                                         
-                                        st.plotly_chart(fig2, use_container_width=True)
+                                        st.plotly_chart(fig2, width="stretch")
                                         
                                         status = "Excellent" if ats_score >= 80 else "Good" if ats_score >= 60 else "Needs Improvement"
                                         st.markdown(f"<div style='text-align: center; font-weight: bold;'>{status}</div>", unsafe_allow_html=True)
@@ -2843,7 +2843,7 @@ class ResumeApp:
                                                     margin=dict(l=20, r=20, t=50, b=20),
                                                 )
                                                 
-                                                st.plotly_chart(fig3, use_container_width=True)
+                                                st.plotly_chart(fig3, width="stretch")
                                                 
                                                 match_status = "Excellent Match" if job_match_score >= 80 else "Good Match" if job_match_score >= 60 else "Low Match"
                                                 st.markdown(f"<div style='text-align: center; font-weight: bold;'>{match_status}</div>", unsafe_allow_html=True)
@@ -3039,7 +3039,7 @@ class ResumeApp:
                                             data=pdf_buffer,
                                             file_name=f"resume_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                             mime="application/pdf",
-                                            use_container_width=True,
+                                            width="stretch",
                                             on_click=lambda: st.balloons()
                                         )
                                     else:
@@ -3094,7 +3094,7 @@ class ResumeApp:
             if st.button("Get Started", key="get_started_btn", 
                         help="Click to start analyzing your resume",
                         type="primary",
-                        use_container_width=True):
+                        width="stretch"):
                 st.session_state.page = 'resume_analyzer'
                 st.rerun()
 
@@ -3118,7 +3118,6 @@ class ResumeApp:
         # Initialize feedback manager
         feedback_manager = FeedbackManager()
         
-        # Create tabs for form and stats
         form_tab, stats_tab = st.tabs(["Submit Feedback", "Feedback Stats"])
         
         with form_tab:
@@ -3312,6 +3311,7 @@ class ResumeApp:
             st.caption(
                 "Sign in with Google or GitHub when configured, or continue as a guest if your host allows it."
             )
+            render_login_spotlight_block()
 
         with signin_col:
             st.markdown("### Sign in")
@@ -3326,7 +3326,7 @@ class ResumeApp:
                 )
 
             if google_oauth_configured():
-                if st.button("Continue with Google", use_container_width=True, key="oauth_btn_google"):
+                if st.button("Continue with Google", width="stretch", key="oauth_btn_google"):
                     st.session_state.oauth_state = new_oauth_state("google")
                     st.session_state.oauth_pending_provider = "google"
                     st.session_state.oauth_login_step_google = True
@@ -3339,10 +3339,10 @@ class ResumeApp:
                 ):
                     cid, _ = google_client_credentials()
                     url = build_google_authorize_url(cid, redirect, st.session_state.oauth_state)
-                    st.link_button("Open Google sign-in →", url=url, use_container_width=True)
+                    st.link_button("Open Google sign-in →", url=url, width="stretch")
 
             if github_oauth_configured():
-                if st.button("Continue with GitHub", use_container_width=True, key="oauth_btn_github"):
+                if st.button("Continue with GitHub", width="stretch", key="oauth_btn_github"):
                     st.session_state.oauth_state = new_oauth_state("github")
                     st.session_state.oauth_pending_provider = "github"
                     st.session_state.oauth_login_step_github = True
@@ -3355,19 +3355,19 @@ class ResumeApp:
                 ):
                     cid, _ = github_client_credentials()
                     url = build_github_authorize_url(cid, redirect, st.session_state.oauth_state)
-                    st.link_button("Open GitHub sign-in →", url=url, use_container_width=True)
+                    st.link_button("Open GitHub sign-in →", url=url, width="stretch")
 
             if not google_oauth_configured() and not github_oauth_configured():
                 st.info(
                     "OAuth is not configured. Add client IDs and secrets to `.streamlit/secrets.toml` "
                     "(see README). Until then, everyone can use the app."
                 )
-                if st.button("Continue to app", use_container_width=True, key="oauth_continue_no_config"):
+                if st.button("Continue to app", width="stretch", key="oauth_continue_no_config"):
                     st.session_state.oauth_browsing_guest = True
                     st.rerun()
             elif not self._oauth_require_login():
                 st.markdown("---")
-                if st.button("Continue without signing in", use_container_width=True, key="oauth_guest"):
+                if st.button("Continue without signing in", width="stretch", key="oauth_guest"):
                     st.session_state.oauth_browsing_guest = True
                     st.session_state.oauth_login_step_google = False
                     st.session_state.oauth_login_step_github = False
@@ -3476,7 +3476,7 @@ class ResumeApp:
 
             # Navigation buttons (must stay inside with st.sidebar)
             for page_name in self.pages.keys():
-                if st.button(page_name, use_container_width=True):
+                if st.button(page_name, width="stretch"):
                     cleaned_name = page_name.lower().replace(" ", "_").replace("🏠", "").replace("🔍", "").replace("📝", "").replace("📊", "").replace("🎯", "").replace("💬", "").replace("ℹ️", "").strip()
                     st.session_state.page = cleaned_name
                     st.rerun()

@@ -433,7 +433,7 @@ def render_job_search():
                 st.markdown('</div>', unsafe_allow_html=True)
 
             # Search button
-            if st.button("SEARCH JOBS", type="primary", use_container_width=True):
+            if st.button("SEARCH JOBS", type="primary", width="stretch"):
                 if job_query:
                     job_portal = JobPortal()
                     results = job_portal.search_jobs(job_query, location, experience)

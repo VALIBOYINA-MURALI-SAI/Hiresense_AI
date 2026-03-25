@@ -345,17 +345,9 @@ Implementation: `utils/resume_corpus_insights.py` (used by `resume_analytics/ana
 - **Priors are filtered** to each role’s **required + recommended technical** vocabulary; **minimum two** export rows per skill for that role.
 - **Force off** even when enabled: **`HIRERESUME_DISABLE_ROLE_PRIORS=1`**. Advanced: **`corpus_prior_skill_cap`** on job requirements.
 
-### Evaluation & feedback (Option A groundwork)
+### Evaluation & feedback (in-app)
 
-Structured **student feedback** on ATS-style scores gives you stats you can cite (e.g. % “about right”) and a path toward **calibration** and **evidence-linked** analysis later.
-
-**Google Form — suggested questions (keep ~2–3 minutes)**  
-1. **Context:** target **role** (dropdown matching the app); **score shown** by the tool (number); optional date.  
-2. **Likert (1–5):** the score **matched** how strong I think my resume is for that role; **missing skills** felt accurate; suggestions were **actionable**.  
-3. **Quick check:** score felt **too high** / **too low** / **about right**.  
-4. **Optional:** one sentence — what was wrong or missing; optional contact if you allow it.
-
-**Turning responses into stats:** In Google Forms → **Responses** → **Link to Sheets**. Use pivot tables or export CSV for summaries (mean Likert by role, % “about right”, counts of “too high” vs “too low”). Paste your live form URL in the README or app sidebar when it exists.
+The **Feedback** page stores responses in `feedback/feedback.db`. Saved **standard** analyses contribute to `resume_data.db` (`resume_analysis`). The OAuth **login** page can show a short **Community snapshot** (trust / experience / average ATS) from that data; optional env keys `HIRERESUME_LOGIN_SPOTLIGHT_*` fill gaps when counts are zero (see `.env.example`).
 
 **Automated regression tests** (`tests/` — PDF layout + skill normalization):
 
