@@ -4,11 +4,22 @@ Uses st.secrets for client credentials and redirect URI; exchange runs on the se
 """
 from __future__ import annotations
 
+import os
+
+import base64
+import hashlib
+import hmac
+import json
 import secrets as secrets_mod
+import time
 import urllib.parse
 from typing import Any, Optional, Tuple
 
 import requests
+
+# Signed OAuth state survives Streamlit session loss after external redirect (e.g. Streamlit Cloud).
+_STATE_TTL_SEC = 20 * 60
+_STATE_VER = 1
 
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
@@ -29,6 +40,23 @@ def _secrets_dict() -> dict:
 
 
 def oauth_redirect_uri() -> Optional[str]:
+    """
+    Redirect URI sent to Google/GitHub must match exactly what is registered for that client.
+
+    Resolution order (first non-empty wins):
+    1. Environment: OAUTH_REDIRECT_URI, oauth_redirect_uri, HIRERESUME_OAUTH_REDIRECT_URI
+       → use in local `.env` so **localhost** wins over Streamlit secrets that point at Cloud.
+    2. Streamlit secrets: oauth_redirect_uri or OAUTH_REDIRECT_URI (typical on Streamlit Cloud).
+    """
+    for key in (
+        "OAUTH_REDIRECT_URI",
+        "oauth_redirect_uri",
+        "HIRERESUME_OAUTH_REDIRECT_URI",
+    ):
+        v = os.environ.get(key)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+
     d = _secrets_dict()
     u = d.get("oauth_redirect_uri") or d.get("OAUTH_REDIRECT_URI")
     if u is None:
@@ -65,8 +93,83 @@ def any_oauth_configured() -> bool:
     return google_oauth_configured() or github_oauth_configured()
 
 
-def new_oauth_state() -> str:
-    return secrets_mod.token_urlsafe(32)
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(s: str) -> bytes:
+    pad = "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s + pad)
+
+
+def oauth_state_signing_key() -> Optional[bytes]:
+    """Stable server-side key for HMAC state (never sent to browser except inside signed blob)."""
+    d = _secrets_dict()
+    explicit = d.get("oauth_state_secret") or d.get("OAUTH_STATE_SECRET")
+    if explicit is not None and str(explicit).strip():
+        return hashlib.sha256(str(explicit).strip().encode("utf-8")).digest()
+    parts: list[str] = []
+    _, gs = google_client_credentials()
+    _, hs = github_client_credentials()
+    if gs:
+        parts.append(str(gs))
+    if hs:
+        parts.append(str(hs))
+    if not parts:
+        return None
+    return hashlib.sha256("||".join(parts).encode("utf-8")).digest()
+
+
+def new_oauth_state(provider: str) -> str:
+    """
+    CSRF state for authorize URL.
+    When client secrets (or oauth_state_secret) exist, returns a signed token so the callback
+    does not depend on st.session_state after Google/GitHub redirect (fixes \"session expired\").
+    """
+    key = oauth_state_signing_key()
+    p = str(provider).strip().lower()
+    if p not in ("google", "github"):
+        p = "google"
+    if not key:
+        return secrets_mod.token_urlsafe(32)
+    nonce = secrets_mod.token_urlsafe(16)
+    payload = {"v": _STATE_VER, "p": p, "n": nonce, "t": int(time.time())}
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    p_b64 = _b64url_encode(raw)
+    sig = hmac.new(key, p_b64.encode("ascii"), hashlib.sha256).digest()
+    s_b64 = _b64url_encode(sig)
+    return f"v{_STATE_VER}.{p_b64}.{s_b64}"
+
+
+def parse_signed_oauth_state(state_param: str) -> Optional[str]:
+    """
+    If state is a valid signed token, return provider ('google' | 'github').
+    Otherwise return None (caller may fall back to session-stored random state).
+    """
+    key = oauth_state_signing_key()
+    if not key or not state_param or not str(state_param).startswith(f"v{_STATE_VER}."):
+        return None
+    parts = str(state_param).split(".", 2)
+    if len(parts) != 3:
+        return None
+    _, p_b64, s_b64 = parts
+    try:
+        sig = _b64url_decode(s_b64)
+        expect = hmac.new(key, p_b64.encode("ascii"), hashlib.sha256).digest()
+        if not hmac.compare_digest(sig, expect):
+            return None
+        payload = json.loads(_b64url_decode(p_b64).decode("utf-8"))
+        if int(payload.get("v", 0)) != _STATE_VER:
+            return None
+        t0 = int(payload.get("t", 0))
+        if int(time.time()) - t0 > _STATE_TTL_SEC:
+            return None
+        p = str(payload.get("p", "")).lower()
+        if p not in ("google", "github"):
+            return None
+        return p
+    except Exception:
+        return None
 
 
 def build_google_authorize_url(client_id: str, redirect_uri: str, state: str) -> str:

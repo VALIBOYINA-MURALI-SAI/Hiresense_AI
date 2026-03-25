@@ -48,6 +48,7 @@ from utils.oauth_login import (
     google_client_credentials,
     github_client_credentials,
     new_oauth_state,
+    parse_signed_oauth_state,
     build_google_authorize_url,
     build_github_authorize_url,
     exchange_google_code,
@@ -3210,13 +3211,20 @@ class ResumeApp:
         state = self._query_param_first("state")
         if not code or not state:
             return
-        expected = st.session_state.get("oauth_state")
-        provider = st.session_state.get("oauth_pending_provider")
-        if not expected or state != expected or not provider:
-            st.session_state["_oauth_error"] = "Sign-in session expired. Please try again."
-            self._clear_oauth_query_params()
-            st.rerun()
-            return
+        # Prefer HMAC-signed state (survives session loss after OAuth redirect on Streamlit Cloud).
+        provider = parse_signed_oauth_state(str(state))
+        if not provider:
+            expected = st.session_state.get("oauth_state")
+            provider = st.session_state.get("oauth_pending_provider")
+            if not expected or str(state) != str(expected) or not provider:
+                st.session_state["_oauth_error"] = (
+                    "Sign-in session expired. Please try again from the login page. "
+                    "If this keeps happening, ensure OAuth client secrets are set in Streamlit Secrets "
+                    "(signed state needs them)."
+                )
+                self._clear_oauth_query_params()
+                st.rerun()
+                return
         redirect = oauth_redirect_uri()
         if not redirect:
             st.session_state["_oauth_error"] = "Missing oauth_redirect_uri in Streamlit secrets."
@@ -3319,7 +3327,7 @@ class ResumeApp:
 
             if google_oauth_configured():
                 if st.button("Continue with Google", use_container_width=True, key="oauth_btn_google"):
-                    st.session_state.oauth_state = new_oauth_state()
+                    st.session_state.oauth_state = new_oauth_state("google")
                     st.session_state.oauth_pending_provider = "google"
                     st.session_state.oauth_login_step_google = True
                     st.session_state.oauth_login_step_github = False
@@ -3335,7 +3343,7 @@ class ResumeApp:
 
             if github_oauth_configured():
                 if st.button("Continue with GitHub", use_container_width=True, key="oauth_btn_github"):
-                    st.session_state.oauth_state = new_oauth_state()
+                    st.session_state.oauth_state = new_oauth_state("github")
                     st.session_state.oauth_pending_provider = "github"
                     st.session_state.oauth_login_step_github = True
                     st.session_state.oauth_login_step_google = False
