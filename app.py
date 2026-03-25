@@ -2,7 +2,11 @@
 Hire Sense AI - Main Application
 """
 import os
-import bootstrap_env  # noqa: F401 — load .env + TLS defaults before utils / gRPC
+
+try:
+    import bootstrap_env  # noqa: F401 — local: .env + TLS defaults before utils / gRPC
+except ModuleNotFoundError:
+    pass  # Streamlit Cloud / clones without bootstrap_env.py (file may be gitignored)
 
 import time
 try:
@@ -60,7 +64,6 @@ import pandas as pd
 import json
 import streamlit as st
 import streamlit.components.v1 as components
-import datetime
 
 # Set page config at the very beginning
 st.set_page_config(
@@ -3250,14 +3253,61 @@ class ResumeApp:
         self._clear_oauth_query_params()
         st.rerun()
 
+    def _load_brand_logo_b64(self):
+        """Brand logo for login / sidebar: same files as `assets/logo.jpg` with `Logo.jpeg` fallback."""
+        root = os.path.dirname(__file__)
+        for fname in ("logo.jpg", "Logo.jpeg"):
+            path = os.path.join(root, "assets", fname)
+            try:
+                with open(path, "rb") as f:
+                    return base64.b64encode(f.read()).decode("utf-8")
+            except Exception:
+                continue
+        return None
+
     def render_oauth_login_page(self):
         st.session_state["_hire_ui_oauth_login"] = True
         self.apply_global_styles()
         err = st.session_state.pop("_oauth_error", None)
-        _, c2, _ = st.columns([1, 2, 1])
-        with c2:
+        logo_b64 = self._load_brand_logo_b64()
+
+        _, outer_l, outer_r, _ = st.columns([0.08, 1.1, 0.95, 0.08])
+        intro_col, signin_col = outer_l, outer_r
+
+        with intro_col:
+            if logo_b64:
+                st.markdown(
+                    f"""
+                    <div style="text-align:center;margin:0 0 1rem 0;">
+                        <img src="data:image/jpeg;base64,{logo_b64}" alt="Hire Sense AI"
+                             style="width:112px;height:112px;object-fit:cover;border-radius:24px;
+                             box-shadow:0 8px 24px rgba(0,0,0,0.1);border:2px solid rgba(26,26,26,0.1);"/>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             st.markdown("## Hire Sense AI")
-            st.markdown("Sign in with **Google** or **GitHub**, or continue without an account.")
+            st.markdown(
+                "Transform your job search with **AI-powered resume analysis and building**. "
+                "Get clear feedback on ATS fit, keywords, and structure—then turn it into a polished resume."
+            )
+            st.markdown("**Overview**")
+            st.markdown(
+                """
+                - **Resume analyzer** — ATS-style scores, skill gaps, and concrete improvement tips  
+                - **Resume builder** — step-by-step sections and exportable documents  
+                - **Dashboard** — see your analyses and activity in one place  
+                - **Job search** — explore roles and align your profile  
+                - **Feedback** — tell us what works so we can keep improving  
+                """
+            )
+            st.caption(
+                "Sign in with Google or GitHub when configured, or continue as a guest if your host allows it."
+            )
+
+        with signin_col:
+            st.markdown("### Sign in")
+            st.markdown("Use **Google** or **GitHub**, or continue without an account when available.")
             if err:
                 st.error(err)
             redirect = oauth_redirect_uri()
@@ -3315,6 +3365,44 @@ class ResumeApp:
                     st.session_state.oauth_login_step_github = False
                     st.rerun()
 
+        # Footer strip: project link, modern stack, contact, copyright (same login page)
+        _gh = "https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI"
+        _li = "https://www.linkedin.com/in/valiboyina-murali-sai-ba5689250/"
+        _mail = "valiboinamuralisai@gmail.com"
+        _yr = datetime.now().year
+        st.markdown(
+            f"""
+            <hr style="margin:2.25rem 0 1.25rem;border:none;border-top:1px solid var(--card-border);"/>
+            <div style="max-width:760px;margin:0 auto 0.5rem;padding:1.35rem 1.5rem;border-radius:20px;
+                        border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);
+                        box-shadow:0 6px 22px rgba(0,0,0,0.06);">
+                <p style="text-align:center;margin:0 0 0.85rem;font-size:1rem;line-height:1.5;">
+                    <a href="{_gh}" target="_blank" rel="noopener noreferrer"
+                       style="color:var(--accent);font-weight:700;text-decoration:none;">Hire Sense AI</a>
+                    <span style="color:var(--muted);"> — </span>
+                    <span style="color:var(--muted);">modern, open-source web app</span>
+                    <span style="color:var(--muted);"> · </span>
+                    <a href="{_gh}" target="_blank" rel="noopener noreferrer"
+                       style="color:var(--text);text-decoration:underline;text-underline-offset:3px;">GitHub</a>
+                    <span style="color:var(--muted);"> · </span>
+                    <a href="https://streamlit.io/" target="_blank" rel="noopener noreferrer"
+                       style="color:var(--text);text-decoration:underline;text-underline-offset:3px;">Streamlit</a>
+                </p>
+                <p style="text-align:center;margin:0 0 0.65rem;font-size:0.92rem;color:var(--muted);line-height:1.55;">
+                    <b style="color:var(--text);">Contact</b><br/>
+                    <a href="mailto:{_mail}" style="color:var(--accent);text-decoration:none;">{_mail}</a>
+                    <span style="color:var(--muted);"> · </span>
+                    <a href="{_li}" target="_blank" rel="noopener noreferrer"
+                       style="color:var(--accent);text-decoration:none;">LinkedIn — Murali Sai</a>
+                </p>
+                <p style="text-align:center;margin:0;font-size:0.78rem;color:var(--muted);letter-spacing:0.02em;">
+                    © {_yr} Hire Sense AI. Developed by Murali Sai &amp; Omkar. All rights reserved.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         self.add_footer()
 
     def main(self):
@@ -3330,14 +3418,8 @@ class ResumeApp:
         if 'theme' not in st.session_state:
             st.session_state.theme = 'dark'
             
-        # Sidebar logo animation (uses local assets/logo.jpg)
-        logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.jpg")
-        logo_b64 = None
-        try:
-            with open(logo_path, "rb") as f:
-                logo_b64 = base64.b64encode(f.read()).decode("utf-8")
-        except Exception:
-            logo_b64 = None
+        # Sidebar logo (same assets as login page)
+        logo_b64 = self._load_brand_logo_b64()
 
         if logo_b64:
             logo_html = f"""

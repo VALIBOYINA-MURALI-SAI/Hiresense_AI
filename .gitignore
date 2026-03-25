@@ -145,8 +145,7 @@ resume_data.db
 *.xlsx
 *.xls
 
-# Local dev / bootstrap helpers
-bootstrap_env.py
+# Local dev — keep .env out of git; bootstrap_env.py is tracked for Streamlit Cloud + local TLS/.env
 .env.example
 
 # One-off patch scripts (internal tooling only)

@@ -1,7 +1,10 @@
 import os
 from pathlib import Path
 
-import bootstrap_env  # noqa: F401 — .env + CA paths before Gemini (see repo root)
+try:
+    import bootstrap_env  # noqa: F401 — local: .env + CA paths before Gemini
+except ModuleNotFoundError:
+    pass
 
 import streamlit as st
 import google.generativeai as genai
