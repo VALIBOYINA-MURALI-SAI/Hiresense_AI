@@ -83,7 +83,8 @@ def render_company_section():
             padding: 1rem 0;
         }
         .company-card {
-            background: rgba(255, 255, 255, 0.05);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
             border-radius: 10px;
             padding: 1rem;
             transition: transform 0.2s;
@@ -91,7 +92,8 @@ def render_company_section():
         }
         .company-card:hover {
             transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--primary-color);
+            box-shadow: 0 6px 18px rgba(33,150,243,0.15);
         }
         .company-header {
             display: flex;
@@ -109,7 +111,8 @@ def render_company_section():
             margin-top: 0.5rem;
         }
         .company-category {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(33, 150, 243, 0.12);
+            color: var(--text);
             padding: 0.2rem 0.5rem;
             border-radius: 15px;
             font-size: 0.8rem;
@@ -134,9 +137,9 @@ def render_company_section():
                         <div class="company-card">
                             <div class="company-header">
                                 <i class="{company['icon']} company-icon" style="color: {company['color']}"></i>
-                                <h3 style="margin: 0;">{company['name']}</h3>
+                                <h3 style="margin: 0; color: var(--text);">{company['name']}</h3>
                             </div>
-                            <p style="margin: 0.5rem 0; color: #888;">{company['description']}</p>
+                            <p style="margin: 0.5rem 0; color: var(--muted);">{company['description']}</p>
                             <div class="company-categories">
                                 {' '.join(f'<span class="company-category">{cat}</span>' for cat in company['categories'])}
                             </div>
@@ -159,7 +162,8 @@ def render_market_insights():
             padding: 1rem 0;
         }
         .insight-card {
-            background: rgba(255, 255, 255, 0.05);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
             border-radius: 10px;
             padding: 1rem;
             text-align: center;
@@ -167,7 +171,7 @@ def render_market_insights():
         }
         .insight-card:hover {
             transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.08);
+            border-color: #00bfa5;
         }
         .insight-icon {
             font-size: 2rem;
@@ -179,7 +183,8 @@ def render_market_insights():
             font-weight: bold;
         }
         .salary-card {
-            background: rgba(255, 255, 255, 0.05);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
             border-radius: 15px;
             padding: 1.5rem;
             margin-bottom: 1rem;
@@ -188,7 +193,7 @@ def render_market_insights():
         }
         .salary-card:hover {
             transform: translateX(10px);
-            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 16px rgba(0,191,165,0.2);
         }
         .salary-header {
             display: flex;
@@ -207,14 +212,15 @@ def render_market_insights():
             margin-top: 0.5rem;
         }
         .salary-tag {
-            background: rgba(0, 191, 165, 0.1);
+            background: rgba(0, 191, 165, 0.15);
             color: #00bfa5;
             padding: 0.3rem 0.8rem;
             border-radius: 20px;
             font-size: 0.9rem;
         }
         .experience-tag {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(33, 150, 243, 0.12);
+            color: var(--text);
             padding: 0.3rem 0.8rem;
             border-radius: 20px;
             font-size: 0.9rem;
@@ -223,6 +229,7 @@ def render_market_insights():
             font-size: 1.2rem;
             font-weight: bold;
             margin: 0;
+            color: var(--text);
         }
         .salary-range {
             font-size: 1.1rem;
@@ -307,7 +314,8 @@ def render_job_search():
         st.markdown("""
             <style>
             .search-container {
-                background: rgba(255, 255, 255, 0.05);
+                background: var(--card-bg);
+                border: 1px solid var(--card-border);
                 border-radius: 10px;
                 padding: 20px;
                 margin-bottom: 20px;
@@ -318,7 +326,7 @@ def render_job_search():
                 margin-bottom: 5px;
             }
             .search-description {
-                color: #888;
+                color: var(--muted);
                 font-size: 0.9rem;
                 margin-bottom: 20px;
             }
@@ -442,16 +450,18 @@ def render_job_search():
                         st.markdown("""
                             <style>
                             .result-card {
-                                background: rgba(255, 255, 255, 0.05);
+                                background: var(--card-bg);
+                                border: 1px solid var(--card-border);
                                 border-radius: 10px;
                                 padding: 15px;
                                 margin-bottom: 10px;
                                 border-left: 4px solid #00bfa5;
                                 transition: transform 0.2s;
+                                color: var(--text);
                             }
                             .result-card:hover {
                                 transform: translateX(5px);
-                                background: rgba(255, 255, 255, 0.08);
+                                box-shadow: 0 4px 14px rgba(0,191,165,0.2);
                             }
                             .portal-name {
                                 color: #00bfa5;

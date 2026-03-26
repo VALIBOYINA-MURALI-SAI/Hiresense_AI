@@ -18,10 +18,10 @@ class DashboardManager:
         """Return a dictionary of colors based on the current theme."""
         if theme == 'light':
             return {
-                'bg_dashboard': "#81ddff",
-                'card_bg': "#000000",
-                'text_primary': "#FFFFFF",
-                'text_secondary': "#FFFFFF",
+                'bg_dashboard': "#f0f4ff",
+                'card_bg': "#ffffff",
+                'text_primary': "#212121",
+                'text_secondary': "#555555",
                 'border': '#e0e0e0',
                 'primary': '#2196F3',
                 'secondary': '#1976D2',
@@ -30,17 +30,17 @@ class DashboardManager:
                 'danger': '#F44336',
                 'info': '#00BCD4',
                 'purple': '#9C27B0',
-                'background': "#000000",          # for plotly paper_bgcolor
-                'plot_bg': "#000000",              # for plotly plot_bgcolor
+                'background': "#ffffff",          # for plotly paper_bgcolor
+                'plot_bg': "#ffffff",              # for plotly plot_bgcolor
                 'grid': '#e0e0e0',
                 'line': '#cccccc'
             }
         else:  # dark
             return {
-                'bg_dashboard': "#62F5FF",
-                'card_bg': "#ffffff",
-                'text_primary': "#000000",
-                'text_secondary': "#000000",
+                'bg_dashboard': "#1a1a2e",
+                'card_bg': "#1e1e1e",
+                'text_primary': "#e0e0e0",
+                'text_secondary': "#aaaaaa",
                 'border': '#333333',
                 'primary': '#2196F3',
                 'secondary': '#1976D2',
@@ -49,10 +49,10 @@ class DashboardManager:
                 'danger': '#F44336',
                 'info': '#00BCD4',
                 'purple': '#9C27B0',
-                'background': "#FFFFFF",           # plotly paper_bgcolor
-                'plot_bg': "#ffffff",               # plotly plot_bgcolor
-                'grid': "#000000",
-                'line': '#666666'
+                'background': "#121212",           # plotly paper_bgcolor
+                'plot_bg': "#1e1e1e",               # plotly plot_bgcolor
+                'grid': "#333333",
+                'line': '#555555'
             }
 
     def _get_plotly_layout(self, colors):
@@ -752,8 +752,7 @@ class DashboardManager:
 
     def render_dashboard(self):
         """Main dashboard rendering function."""
-        theme = st.session_state.get('theme', 'dark')
-        colors = self._get_theme_colors(theme)
+        colors = self._get_theme_colors('light')
         
         self.apply_dashboard_style(colors)
 

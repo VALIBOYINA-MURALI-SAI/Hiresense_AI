@@ -24,6 +24,7 @@
     --text-primary: #000000;
     --text-secondary: #333333;  /* dark gray, still readable */
     --muted: #666666;            /* for less important text */
+    --text: #212121;
     
     /* Status colors (keep as is or adjust) */
     --success: #4CAF50;
@@ -40,6 +41,26 @@
     /* Glass effect (kept light) */
     --glass: rgba(255,255,255,0.8);
     --glass-border: rgba(255,255,255,0.3);
+}
+
+/* Dark theme overrides — mirrors apply_global_styles dark vars */
+html[data-theme="dark"],
+html.theme-dark {
+    --background-dark: #121212;
+    --background-mid: #1e1e1e;
+    --background-light: #2d2d2d;
+    --card-bg: #1e1e1e;
+    --card-border: #333333;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --muted: #aaaaaa;
+    --text: #e0e0e0;
+    --bg-dark: #1e1e1e;
+    --bg-light: #2d2d2d;
+    --border-color: #333333;
+    --glass: rgba(30,30,30,0.92);
+    --glass-border: rgba(255,255,255,0.1);
+    --shadow-soft: 0 4px 12px rgba(0,0,0,0.5);
 }
 
 /* Global Styles */
@@ -68,8 +89,15 @@ body {
 
 /* Sidebar Styling */
 .css-1d391kg {
-    background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
+    background: var(--background-mid);
     border-right: 1px solid var(--card-border);
+}
+html[data-theme="dark"] .css-1d391kg,
+html.theme-dark .css-1d391kg,
+html[data-theme="dark"] [data-testid="stSidebar"],
+html.theme-dark [data-testid="stSidebar"] {
+    background: #1a1a1a !important;
+    border-right: 1px solid #333333 !important;
 }
 
 .css-1d391kg .stSelectbox label {

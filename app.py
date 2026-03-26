@@ -204,17 +204,10 @@ class ResumeApp:
         return r.json()
 
     def apply_global_styles(self):
-        theme = st.session_state.get('theme', 'dark')
-        try:
-            config_theme = st.get_option('theme.base')
-            if config_theme in ('dark', 'light'):
-                theme = config_theme
-        except Exception:
-            pass
-
-        # Keep session state in sync with Streamlit theme settings
-        st.session_state.theme = theme
-        theme_class = 'theme-dark' if theme == 'dark' else 'theme-light'
+        # Always force light theme — ignore system/Streamlit dark mode preference
+        theme = 'light'
+        st.session_state.theme = 'light'
+        theme_class = 'theme-light'
 
         _hire_oauth_login = bool(st.session_state.get("_hire_ui_oauth_login", False))
         _hire_oauth_js = "true" if _hire_oauth_login else "false"
@@ -236,7 +229,7 @@ class ResumeApp:
             --card-border: #333333;
             --text: #e0e0e0;              /* Light gray, good contrast */
             --text-primary: #ffffff;       /* Pure white for important text */
-            --text-contrast: #000000;
+            --text-contrast: #ffffff;      /* White text on accent/gradient backgrounds */
             --muted: #aaaaaa;              /* Muted text, still readable */
 
             --primary-color: #2196F3;
@@ -621,6 +614,303 @@ class ResumeApp:
             -webkit-text-fill-color: #000000 !important;
             border-color: #1a1a1a !important;
             box-shadow: 0 14px 36px rgba(129, 199, 132, 0.45), 0 0 0 2px rgba(165, 214, 167, 0.75), 0 6px 20px rgba(76, 175, 80, 0.2) !important;
+        }}
+
+        /* =====================================================================
+           DARK THEME — comprehensive text-visibility fixes
+           Targets BOTH our JS-applied class (theme-dark) AND Streamlit's native
+           data-theme attribute so whichever fires first wins.
+           ===================================================================== */
+
+        /* Re-declare CSS variables via data-theme attribute for Streamlit dark */
+        html[data-theme="dark"] {{
+            --bg: #121212;
+            --bg-secondary: #1e1e1e;
+            --background-dark: #121212;
+            --background-mid: #1e1e1e;
+            --background-light: #2d2d2d;
+            --card-bg: #1e1e1e;
+            --card-border: #333333;
+            --text: #e0e0e0;
+            --text-primary: #ffffff;
+            --muted: #aaaaaa;
+            --input-bg: #2d2d2d;
+            --primary-color: #2196F3;
+            --primary-gradient: linear-gradient(135deg, #2196F3, #1976D2);
+            --glass: rgba(30,30,30,0.92);
+            --glass-border: rgba(255,255,255,0.1);
+            --shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }}
+
+        /* App container background */
+        html.theme-dark .stApp,
+        html[data-theme="dark"] .stApp,
+        html.theme-dark [data-testid="stAppViewContainer"],
+        html[data-theme="dark"] [data-testid="stAppViewContainer"] {{
+            background: #121212 !important;
+            color: #e0e0e0 !important;
+        }}
+
+        /* Markdown text — most common visible text element */
+        html.theme-dark [data-testid="stMarkdownContainer"] p,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] p,
+        html.theme-dark [data-testid="stMarkdownContainer"] span,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] span,
+        html.theme-dark [data-testid="stMarkdownContainer"] li,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] li,
+        html.theme-dark [data-testid="stMarkdownContainer"] a,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] a,
+        html.theme-dark [data-testid="stMarkdownContainer"] code,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] code,
+        html.theme-dark [data-testid="stMarkdownContainer"] strong,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] strong,
+        html.theme-dark [data-testid="stMarkdownContainer"] em,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] em {{
+            color: #e0e0e0 !important;
+        }}
+
+        /* Headings inside markdown / anywhere in dark mode */
+        html.theme-dark [data-testid="stMarkdownContainer"] h1,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] h1,
+        html.theme-dark [data-testid="stMarkdownContainer"] h2,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] h2,
+        html.theme-dark [data-testid="stMarkdownContainer"] h3,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] h3,
+        html.theme-dark [data-testid="stMarkdownContainer"] h4,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] h4,
+        html.theme-dark [data-testid="stMarkdownContainer"] h5,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] h5,
+        html.theme-dark [data-testid="stMarkdownContainer"] h6,
+        html[data-theme="dark"] [data-testid="stMarkdownContainer"] h6 {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }}
+
+        /* Native widget labels (above select, input, slider, etc.) */
+        html.theme-dark label,
+        html[data-theme="dark"] label,
+        html.theme-dark [data-testid="stWidgetLabel"] p,
+        html[data-theme="dark"] [data-testid="stWidgetLabel"] p,
+        html.theme-dark [data-testid="stWidgetLabel"] span,
+        html[data-theme="dark"] [data-testid="stWidgetLabel"] span,
+        html.theme-dark [data-baseweb="label"],
+        html[data-theme="dark"] [data-baseweb="label"] {{
+            color: #e0e0e0 !important;
+            -webkit-text-fill-color: #e0e0e0 !important;
+        }}
+
+        /* Metric card text */
+        html.theme-dark [data-testid="stMetricLabel"] p,
+        html[data-theme="dark"] [data-testid="stMetricLabel"] p,
+        html.theme-dark [data-testid="stMetricLabel"] span,
+        html[data-theme="dark"] [data-testid="stMetricLabel"] span,
+        html.theme-dark [data-testid="stMetricValue"],
+        html[data-theme="dark"] [data-testid="stMetricValue"],
+        html.theme-dark [data-testid="stMetricValue"] *,
+        html[data-theme="dark"] [data-testid="stMetricValue"] *,
+        html.theme-dark [data-testid="stMetricDelta"],
+        html[data-theme="dark"] [data-testid="stMetricDelta"] {{
+            color: #e0e0e0 !important;
+            -webkit-text-fill-color: #e0e0e0 !important;
+        }}
+
+        /* Tab labels */
+        html.theme-dark .stTabs [role="tab"],
+        html[data-theme="dark"] .stTabs [role="tab"],
+        html.theme-dark .stTabs [role="tab"] p,
+        html[data-theme="dark"] .stTabs [role="tab"] p,
+        html.theme-dark [data-baseweb="tab"] button,
+        html[data-theme="dark"] [data-baseweb="tab"] button,
+        html.theme-dark [data-baseweb="tab-list"] button,
+        html[data-theme="dark"] [data-baseweb="tab-list"] button {{
+            color: #e0e0e0 !important;
+            -webkit-text-fill-color: #e0e0e0 !important;
+        }}
+
+        /* Expander header */
+        html.theme-dark [data-testid="stExpander"] summary,
+        html[data-theme="dark"] [data-testid="stExpander"] summary,
+        html.theme-dark [data-testid="stExpander"] summary p,
+        html[data-theme="dark"] [data-testid="stExpander"] summary p,
+        html.theme-dark [data-testid="stExpander"] summary span,
+        html[data-theme="dark"] [data-testid="stExpander"] summary span,
+        html.theme-dark .streamlit-expanderHeader,
+        html[data-theme="dark"] .streamlit-expanderHeader {{
+            color: #e0e0e0 !important;
+            -webkit-text-fill-color: #e0e0e0 !important;
+        }}
+
+        /* Caption and small text */
+        html.theme-dark [data-testid="stCaption"] p,
+        html[data-theme="dark"] [data-testid="stCaption"] p,
+        html.theme-dark [data-testid="stText"],
+        html[data-theme="dark"] [data-testid="stText"],
+        html.theme-dark .stCaption p,
+        html[data-theme="dark"] .stCaption p {{
+            color: #aaaaaa !important;
+        }}
+
+        /* Info / success / warning / error alert text */
+        html.theme-dark [data-testid="stAlert"] p,
+        html[data-theme="dark"] [data-testid="stAlert"] p,
+        html.theme-dark [data-testid="stNotification"] p,
+        html[data-theme="dark"] [data-testid="stNotification"] p {{
+            color: #e0e0e0 !important;
+        }}
+
+        /* Selectbox / multiselect selected-value and option text */
+        html.theme-dark [data-baseweb="select"] [data-testid="stMarkdownContainer"] p,
+        html[data-theme="dark"] [data-baseweb="select"] [data-testid="stMarkdownContainer"] p,
+        html.theme-dark [data-baseweb="select"] span,
+        html[data-theme="dark"] [data-baseweb="select"] span,
+        html.theme-dark [data-baseweb="select"] div,
+        html[data-theme="dark"] [data-baseweb="select"] div {{
+            color: #e0e0e0 !important;
+        }}
+        html.theme-dark [data-baseweb="select"] > div,
+        html[data-theme="dark"] [data-baseweb="select"] > div,
+        html.theme-dark [data-baseweb="select"] [role="listbox"] li,
+        html[data-theme="dark"] [data-baseweb="select"] [role="listbox"] li {{
+            background-color: #1e1e1e !important;
+        }}
+
+        /* Input text fields */
+        html.theme-dark div[data-baseweb="input"] input,
+        html[data-theme="dark"] div[data-baseweb="input"] input,
+        html.theme-dark div[data-baseweb="textarea"] textarea,
+        html[data-theme="dark"] div[data-baseweb="textarea"] textarea,
+        html.theme-dark .stTextInput input,
+        html[data-theme="dark"] .stTextInput input,
+        html.theme-dark .stTextArea textarea,
+        html[data-theme="dark"] .stTextArea textarea,
+        html.theme-dark .stNumberInput input,
+        html[data-theme="dark"] .stNumberInput input {{
+            color: #e0e0e0 !important;
+            background-color: #2d2d2d !important;
+        }}
+
+        /* Sidebar text */
+        html.theme-dark [data-testid="stSidebar"] label,
+        html[data-theme="dark"] [data-testid="stSidebar"] label,
+        html.theme-dark [data-testid="stSidebar"] p,
+        html[data-theme="dark"] [data-testid="stSidebar"] p,
+        html.theme-dark [data-testid="stSidebar"] span:not([class*="badge"]):not([class*="token"]),
+        html[data-theme="dark"] [data-testid="stSidebar"] span:not([class*="badge"]):not([class*="token"]),
+        html.theme-dark [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        html[data-theme="dark"] [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{
+            color: #e0e0e0 !important;
+        }}
+
+        /* DataFrames / tables */
+        html.theme-dark [data-testid="stDataFrame"] th,
+        html[data-theme="dark"] [data-testid="stDataFrame"] th,
+        html.theme-dark [data-testid="stDataFrame"] td,
+        html[data-theme="dark"] [data-testid="stDataFrame"] td {{
+            color: #e0e0e0 !important;
+            background-color: #1e1e1e !important;
+        }}
+
+        /* Slider / select-slider tick marks and labels */
+        html.theme-dark [data-baseweb="tick"],
+        html[data-theme="dark"] [data-baseweb="tick"],
+        html.theme-dark [data-baseweb="slider"] [data-baseweb="tick-bar"] span,
+        html[data-theme="dark"] [data-baseweb="slider"] [data-baseweb="tick-bar"] span {{
+            color: #e0e0e0 !important;
+        }}
+
+        /* Global headings in dark mode (covers st.title, st.header, st.subheader
+           which render inside stHeadingWithActionElements, NOT stMarkdownContainer) */
+        html.theme-dark h1,
+        html[data-theme="dark"] h1,
+        html.theme-dark h2,
+        html[data-theme="dark"] h2,
+        html.theme-dark h3,
+        html[data-theme="dark"] h3,
+        html.theme-dark h4,
+        html[data-theme="dark"] h4,
+        html.theme-dark h5,
+        html[data-theme="dark"] h5,
+        html.theme-dark h6,
+        html[data-theme="dark"] h6 {{
+            color: #ffffff !important;
+        }}
+        /* Keep gradient h1 transparent so the blue gradient shows */
+        html.theme-dark h1[style*="background"],
+        html[data-theme="dark"] h1[style*="background"],
+        html.theme-dark .header-title,
+        html[data-theme="dark"] .header-title {{
+            -webkit-text-fill-color: transparent !important;
+        }}
+        /* st.title / st.header / st.subheader rendered headings */
+        html.theme-dark [data-testid="stHeadingWithActionElements"] h1,
+        html[data-theme="dark"] [data-testid="stHeadingWithActionElements"] h1,
+        html.theme-dark [data-testid="stHeadingWithActionElements"] h2,
+        html[data-theme="dark"] [data-testid="stHeadingWithActionElements"] h2,
+        html.theme-dark [data-testid="stHeadingWithActionElements"] h3,
+        html[data-theme="dark"] [data-testid="stHeadingWithActionElements"] h3,
+        html.theme-dark [data-testid="stHeadingWithActionElements"] h4,
+        html[data-theme="dark"] [data-testid="stHeadingWithActionElements"] h4,
+        html.theme-dark [data-testid="stHeadingWithActionElements"] p,
+        html[data-theme="dark"] [data-testid="stHeadingWithActionElements"] p,
+        html.theme-dark [data-testid="stHeadingWithActionElements"] span,
+        html[data-theme="dark"] [data-testid="stHeadingWithActionElements"] span {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }}
+        /* st.write, st.text, st.title default text wrapper */
+        html.theme-dark [data-testid="stText"] p,
+        html[data-theme="dark"] [data-testid="stText"] p,
+        html.theme-dark [data-testid="stVerticalBlock"] > div > [data-testid="stMarkdownContainer"] p,
+        html[data-theme="dark"] [data-testid="stVerticalBlock"] > div > [data-testid="stMarkdownContainer"] p {{
+            color: #e0e0e0 !important;
+        }}
+
+        /* Card / page-header / hero background in dark mode */
+        html.theme-dark .page-header,
+        html[data-theme="dark"] .page-header,
+        html.theme-dark .hero-header,
+        html[data-theme="dark"] .hero-header,
+        html.theme-dark .feature-card,
+        html[data-theme="dark"] .feature-card,
+        html.theme-dark .card,
+        html[data-theme="dark"] .card,
+        html.theme-dark .stCard,
+        html[data-theme="dark"] .stCard {{
+            background: #1e1e1e !important;
+            border-color: #333333 !important;
+            color: #e0e0e0 !important;
+        }}
+        html.theme-dark .page-header *,
+        html[data-theme="dark"] .page-header *,
+        html.theme-dark .hero-header *,
+        html[data-theme="dark"] .hero-header * {{
+            color: #e0e0e0 !important;
+        }}
+        html.theme-dark .page-header h1,
+        html[data-theme="dark"] .page-header h1,
+        html.theme-dark .hero-header h1,
+        html[data-theme="dark"] .hero-header h1 {{
+            -webkit-text-fill-color: transparent !important;
+        }}
+
+        /* Buttons stay white with dark text regardless of theme (already !important above, but reinforce) */
+        html.theme-dark .stButton button,
+        html[data-theme="dark"] .stButton button,
+        html.theme-dark [data-testid^="stBaseButton"] button,
+        html[data-theme="dark"] [data-testid^="stBaseButton"] button {{
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+            border: 2px solid #1a1a1a !important;
+        }}
+        html.theme-dark [data-testid="stLinkButton"] a,
+        html[data-theme="dark"] [data-testid="stLinkButton"] a {{
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+            border: 2px solid #1a1a1a !important;
         }}
         </style>
         <script>
@@ -2023,12 +2313,12 @@ class ResumeApp:
                         .stats-value {
                             font-size: 28px;
                             font-weight: bold;
-                            color: var(--text-contrast);
+                            color: #ffffff;
                             margin: 10px 0;
                         }
                         .stats-label {
                             font-size: 14px;
-                            color: var(--muted);
+                            color: rgba(255, 255, 255, 0.75);
                             text-transform: uppercase;
                             letter-spacing: 1px;
                         }
@@ -2067,7 +2357,7 @@ class ResumeApp:
                         with col3:
                             # Create a gauge chart for average score
                             import plotly.graph_objects as go
-                            chart_text_color = "#F3F7FA" if st.session_state.get('theme', 'dark') == 'dark' else "#111827"
+                            chart_text_color = "#111827"
                             fig = go.Figure(go.Indicator(
                                 mode="gauge+number",
                                 value=ai_stats["average_score"],
@@ -2443,9 +2733,9 @@ class ResumeApp:
                             }
                             .modern-analyses-table td {
                                 padding: 15px;
-                                background-color: rgba(30, 30, 30, 0.7);
-                                border-top: 1px solid rgba(255, 255, 255, 0.05);
-                                border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+                                background-color: var(--card-bg);
+                                border-top: 1px solid var(--card-border);
+                                border-bottom: 1px solid var(--card-border);
                                 color: var(--text);
                             }
                             .modern-analyses-table tr td:first-child {
@@ -2457,7 +2747,7 @@ class ResumeApp:
                                 border-bottom-right-radius: 8px;
                             }
                             .modern-analyses-table tr:hover td {
-                                background-color: rgba(60, 60, 60, 0.7);
+                                background-color: rgba(33, 150, 243, 0.08);
                                 transform: translateY(-2px);
                                 transition: all 0.2s ease;
                                 box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
@@ -2474,11 +2764,11 @@ class ResumeApp:
                             }
                             .model-gemini {
                                 background: linear-gradient(135deg, #4e54c8, #8f94fb);
-                                color: var(--text-contrast);
+                                color: #ffffff;
                             }
                             .model-claude {
                                 background: linear-gradient(135deg, #834d9b, #d04ed6);
-                                color: var(--text-contrast);
+                                color: #ffffff;
                             }
                             .score-pill {
                                 display: inline-block;
@@ -2488,7 +2778,7 @@ class ResumeApp:
                                 text-align: center;
                                 min-width: 70px;
                                 box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-                                color: var(--text-contrast);
+                                color: #ffffff;
                             }
                             .score-high {
                                 background: linear-gradient(135deg, #11998e, #38ef7d);
@@ -2561,7 +2851,7 @@ class ResumeApp:
                             st.markdown("""
                             </table>
 
-                            <p style='color: var(--text-contrast); text-align: center; font-style: italic; margin-top: 15px;'>
+                            <p style='color: rgba(255,255,255,0.8); text-align: center; font-style: italic; margin-top: 15px;'>
                                 These are the most recent resume analyses performed by our AI models.
                             </p>
                             </div>
@@ -3457,9 +3747,9 @@ class ResumeApp:
         ):
             st.session_state.oauth_browsing_guest = True
 
-        # Theme (default to dark)
+        # Always light theme
         if 'theme' not in st.session_state:
-            st.session_state.theme = 'dark'
+            st.session_state.theme = 'light'
             
         # Sidebar logo (same assets as login page)
         logo_b64 = self._load_brand_logo_b64()
