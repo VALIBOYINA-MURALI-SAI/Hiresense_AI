@@ -323,7 +323,9 @@ class AIResumeAnalyzer:
                 }
             return {"error": f"Analysis failed: {err_msg}"}
 
-    
+        except Exception as e:
+            return {"error": f"Analysis failed: {str(e)}"}
+
     def generate_pdf_report(self, analysis_result, candidate_name, job_role):
         """Generate a PDF report of the analysis"""
         try:

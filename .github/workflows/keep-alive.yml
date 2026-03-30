@@ -17,4 +17,4 @@ jobs:
         # dashboard and alerting: https://uptimerobot.com
         run: |
           curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" \
-            "${{ vars.STREAMLIT_APP_URL || 'https://hiresense-ai.streamlit.app' }}"
+            "${{ vars.STREAMLIT_APP_URL || 'https://hire-sense-ai-srm.streamlit.app/' }}"
