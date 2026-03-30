@@ -60,7 +60,11 @@ from utils.oauth_login import (
     fetch_github_primary_email,
     normalize_google_user,
     normalize_github_user,
+    create_session_token,
+    create_guest_session_token,
+    validate_session_token,
 )
+import extra_streamlit_components as stx
 import traceback
 import plotly.express as px
 import pandas as pd
@@ -74,6 +78,15 @@ st.set_page_config(
     page_icon="🚀",
     layout="wide"
 )
+
+_SESSION_COOKIE = "hiresense_session"
+_SESSION_TTL_HOURS = 5
+
+
+def _get_cookie_manager():
+    if "_cookie_mgr" not in st.session_state:
+        st.session_state["_cookie_mgr"] = stx.CookieManager()
+    return st.session_state["_cookie_mgr"]
 
 
 def _hireresume_skip_login_env() -> bool:
@@ -160,10 +173,6 @@ class ResumeApp:
             st.session_state.oauth_user = None
         if "oauth_browsing_guest" not in st.session_state:
             st.session_state.oauth_browsing_guest = False
-        if "oauth_login_step_google" not in st.session_state:
-            st.session_state.oauth_login_step_google = False
-        if "oauth_login_step_github" not in st.session_state:
-            st.session_state.oauth_login_step_github = False
 
         # Initialize database
         init_database()
@@ -1112,8 +1121,6 @@ class ResumeApp:
         """Render the dashboard page"""
         self.dashboard_manager.render_dashboard()
 
-        st.toast("Check out these repositories: [Awesome Hacking](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI)", icon="ℹ️")
-
 
     def render_empty_state(self, icon, message):
         """Render an empty state with icon and message"""
@@ -1553,8 +1560,6 @@ class ResumeApp:
                 print(f"Full traceback: {traceback.format_exc()}")
                 st.error(f"❌ Error preparing resume data: {str(e)}")
 
-        st.toast("Check out these repositories: [30-Days-Of-Rust](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI)", icon="ℹ️")
-
     def render_about(self):
         """Render the about page"""
         # Apply modern styles
@@ -1792,8 +1797,6 @@ class ResumeApp:
                 </a>
             </div>
         """, unsafe_allow_html=True)
-
-        st.toast("Check out these repositories: [Iriswise](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI)", icon="ℹ️")
 
     def render_analyzer(self):
         """Render the resume analyzer page"""
@@ -2499,14 +2502,12 @@ class ResumeApp:
                                 "This is a conceptual visualization. To implement actual time-based analysis, additional data collection would be needed.")
 
                             # Create mock data for timeline
-                            import datetime
+                            from datetime import datetime as _dt, timedelta as _td
                             import numpy as np
 
-                            today = datetime.datetime.now()
+                            today = _dt.now()
                             dates = [
-    (today -
-    datetime.timedelta(
-        days=i)).strftime('%Y-%m-%d') for i in range(7)]
+    (today - _td(days=i)).strftime('%Y-%m-%d') for i in range(7)]
                             dates.reverse()
 
                             # Generate some random data that sums to
@@ -3365,7 +3366,6 @@ class ResumeApp:
                             import traceback as tb
                             st.code(tb.format_exc())
 
-        st.toast("Check out these repositories: [Awesome Java](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI)", icon="ℹ️")
 
 
     def render_home(self):
@@ -3400,7 +3400,6 @@ class ResumeApp:
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        st.toast("Check out these repositories: [AI-Nexus(AI/ML)](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI)", icon="ℹ️")
 
         # Call-to-Action with Streamlit navigation
         col1, col2, col3 = st.columns([1, 1, 1])
@@ -3416,7 +3415,6 @@ class ResumeApp:
         """Render the job search page"""
         render_job_search()
 
-        st.toast("Check out these repositories: [GeeksforGeeks-POTD](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI)", icon="ℹ️")
 
 
     def render_feedback_page(self):
@@ -3440,7 +3438,6 @@ class ResumeApp:
         with stats_tab:
             feedback_manager.render_feedback_stats()
 
-        st.toast("Check out these repositories: [TryHackMe Free Rooms](https://github.com/VALIBOYINA-MURALI-SAI/Hiresense_AI)", icon="ℹ️")
 
 
     def show_repo_notification(self):
@@ -3490,12 +3487,65 @@ class ResumeApp:
         except Exception:
             return False
 
+    def _restore_session_from_cookie(self) -> bool:
+        """Try to restore an authenticated session from a browser cookie."""
+        try:
+            cookie_mgr = _get_cookie_manager()
+            token = cookie_mgr.get(_SESSION_COOKIE)
+            if not token:
+                return False
+            payload = validate_session_token(str(token))
+            if payload is None:
+                return False
+            if payload.get("guest"):
+                st.session_state.oauth_browsing_guest = True
+                return True
+            user = payload.get("u")
+            if user:
+                st.session_state.oauth_user = user
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _set_session_cookie(self):
+        """Persist the current session (user or guest) to a browser cookie."""
+        try:
+            cookie_mgr = _get_cookie_manager()
+            user = st.session_state.get("oauth_user")
+            if user:
+                token = create_session_token(user, ttl_hours=_SESSION_TTL_HOURS)
+            elif st.session_state.get("oauth_browsing_guest"):
+                token = create_guest_session_token(ttl_hours=_SESSION_TTL_HOURS)
+            else:
+                return
+            if token:
+                from datetime import timedelta
+                cookie_mgr.set(
+                    _SESSION_COOKIE,
+                    token,
+                    expires_at=datetime.now() + timedelta(hours=_SESSION_TTL_HOURS),
+                    key="set_session_cookie",
+                )
+        except Exception:
+            pass
+
+    def _clear_session_cookie(self):
+        """Remove the session cookie on sign-out."""
+        try:
+            cookie_mgr = _get_cookie_manager()
+            cookie_mgr.delete(_SESSION_COOKIE, key="del_session_cookie")
+        except Exception:
+            pass
+
     def _oauth_access_granted(self) -> bool:
         if _hireresume_skip_login_env():
             return True
         if st.session_state.get("oauth_user"):
             return True
         if not any_oauth_configured():
+            return True
+        if self._restore_session_from_cookie():
             return True
         if self._oauth_require_login():
             return False
@@ -3568,9 +3618,8 @@ class ResumeApp:
                 raise RuntimeError("Unknown OAuth provider.")
             st.session_state.oauth_state = None
             st.session_state.oauth_pending_provider = None
-            st.session_state.oauth_login_step_google = False
-            st.session_state.oauth_login_step_github = False
             st.session_state["_oauth_error"] = None
+            self._set_session_cookie()
         except Exception as e:
             st.session_state["_oauth_error"] = str(e)
         self._clear_oauth_query_params()
@@ -3635,58 +3684,28 @@ class ResumeApp:
             if err:
                 st.error(err)
             redirect = oauth_redirect_uri()
-            if any_oauth_configured() and not redirect:
-                st.warning(
-                    "Add **oauth_redirect_uri** to Streamlit secrets (must match the URL registered "
-                    "at Google/GitHub), for example `http://localhost:8501/` for local runs."
-                )
+            if google_oauth_configured() and redirect:
+                cid, _ = google_client_credentials()
+                state = new_oauth_state("google")
+                url = build_google_authorize_url(cid, redirect, state)
+                st.link_button("Sign in with Google", url=url, width="stretch")
 
-            if google_oauth_configured():
-                if st.button("Continue with Google", width="stretch", key="oauth_btn_google"):
-                    st.session_state.oauth_state = new_oauth_state("google")
-                    st.session_state.oauth_pending_provider = "google"
-                    st.session_state.oauth_login_step_google = True
-                    st.session_state.oauth_login_step_github = False
-                    st.rerun()
-                if (
-                    redirect
-                    and st.session_state.get("oauth_login_step_google")
-                    and st.session_state.get("oauth_pending_provider") == "google"
-                ):
-                    cid, _ = google_client_credentials()
-                    url = build_google_authorize_url(cid, redirect, st.session_state.oauth_state)
-                    st.link_button("Open Google sign-in →", url=url, width="stretch")
-
-            if github_oauth_configured():
-                if st.button("Continue with GitHub", width="stretch", key="oauth_btn_github"):
-                    st.session_state.oauth_state = new_oauth_state("github")
-                    st.session_state.oauth_pending_provider = "github"
-                    st.session_state.oauth_login_step_github = True
-                    st.session_state.oauth_login_step_google = False
-                    st.rerun()
-                if (
-                    redirect
-                    and st.session_state.get("oauth_login_step_github")
-                    and st.session_state.get("oauth_pending_provider") == "github"
-                ):
-                    cid, _ = github_client_credentials()
-                    url = build_github_authorize_url(cid, redirect, st.session_state.oauth_state)
-                    st.link_button("Open GitHub sign-in →", url=url, width="stretch")
+            if github_oauth_configured() and redirect:
+                cid, _ = github_client_credentials()
+                state = new_oauth_state("github")
+                url = build_github_authorize_url(cid, redirect, state)
+                st.link_button("Sign in with GitHub", url=url, width="stretch")
 
             if not google_oauth_configured() and not github_oauth_configured():
-                st.info(
-                    "OAuth is not configured. Add client IDs and secrets to `.streamlit/secrets.toml` "
-                    "(see README). Until then, everyone can use the app."
-                )
                 if st.button("Continue to app", width="stretch", key="oauth_continue_no_config"):
                     st.session_state.oauth_browsing_guest = True
+                    self._set_session_cookie()
                     st.rerun()
             elif not self._oauth_require_login():
                 st.markdown("---")
                 if st.button("Continue without signing in", width="stretch", key="oauth_guest"):
                     st.session_state.oauth_browsing_guest = True
-                    st.session_state.oauth_login_step_google = False
-                    st.session_state.oauth_login_step_github = False
+                    self._set_session_cookie()
                     st.rerun()
 
         # Footer strip: project link, modern stack, contact, copyright (same login page)
@@ -3793,8 +3812,7 @@ class ResumeApp:
                 if st.button("Sign out", key="oauth_user_sign_out"):
                     st.session_state.oauth_user = None
                     st.session_state.oauth_browsing_guest = False
-                    st.session_state.oauth_login_step_google = False
-                    st.session_state.oauth_login_step_github = False
+                    self._clear_session_cookie()
                     st.rerun()
             elif any_oauth_configured() and st.session_state.get("oauth_browsing_guest"):
                 st.caption("Browsing as guest")
@@ -3806,8 +3824,16 @@ class ResumeApp:
                     st.session_state.page = cleaned_name
                     st.rerun()
 
-            # Add some space before admin login
-            st.markdown("<br><br>", unsafe_allow_html=True)
+            st.markdown(
+                '<p style="margin:1.5rem 0 0;padding:0.6rem 0.8rem;border-radius:8px;'
+                'background:rgba(33,150,243,0.08);font-size:0.82rem;color:var(--text);'
+                'line-height:1.45;text-align:center;">'
+                'For the best experience, use <b>Light theme</b> '
+                '(Settings &#x2192; Theme).</p>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("---")
 
             # Admin Login/Logout section at bottom

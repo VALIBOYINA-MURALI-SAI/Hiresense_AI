@@ -288,23 +288,40 @@ class AIResumeAnalyzer:
                 [List specific requirements from the job description that are not addressed in the resume, with recommendations on how to address each gap]
                 """
             
-            response = model.generate_content(base_prompt)
-            analysis = response.text.strip()
-            
-            # Extract resume score if present
-            resume_score = self._extract_score_from_text(analysis)
-            
-            # Extract ATS score if present
-            ats_score = self._extract_ats_score_from_text(analysis)
-            
-            return {
-                "analysis": analysis,
-                "resume_score": resume_score,
-                "ats_score": ats_score
-            }
-        
-        except Exception as e:
-            return {"error": f"Analysis failed: {str(e)}"}
+            import time as _time
+
+            last_err = None
+            for attempt in range(3):
+                try:
+                    response = model.generate_content(
+                        base_prompt,
+                        request_options={"timeout": 120},
+                    )
+                    analysis = response.text.strip()
+
+                    resume_score = self._extract_score_from_text(analysis)
+                    ats_score = self._extract_ats_score_from_text(analysis)
+
+                    return {
+                        "analysis": analysis,
+                        "resume_score": resume_score,
+                        "ats_score": ats_score,
+                        "model_used": "Google Gemini",
+                    }
+                except Exception as retry_err:
+                    last_err = retry_err
+                    if attempt < 2:
+                        _time.sleep(2 ** attempt)
+
+            err_msg = str(last_err)
+            if any(k in err_msg.lower() for k in ("deadline", "timeout", "timed out", "unavailable", "connection")):
+                return {
+                    "error": (
+                        "The AI service did not respond in time — this is usually caused by a slow or "
+                        "unstable internet connection. Please check your network and try again."
+                    )
+                }
+            return {"error": f"Analysis failed: {err_msg}"}
 
     
     def generate_pdf_report(self, analysis_result, candidate_name, job_role):

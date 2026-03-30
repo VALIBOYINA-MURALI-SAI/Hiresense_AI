@@ -620,6 +620,93 @@ a:hover {
     border: 1px solid var(--glass-border);
 }
 
+/* ===== Force Streamlit chrome visible when system dark mode is active ===== */
+/* Header / toolbar (hamburger, deploy, settings icons) */
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+header[data-testid="stHeader"] {
+    background: var(--background-dark, #f8f9fa) !important;
+    color: var(--text-primary, #212121) !important;
+}
+
+[data-testid="stToolbar"] button,
+[data-testid="stMainMenu"] button,
+header button,
+[data-testid="stHeader"] button {
+    color: var(--text-primary, #212121) !important;
+    -webkit-text-fill-color: var(--text-primary, #212121) !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stToolbar"] svg,
+[data-testid="stMainMenu"] svg,
+header svg {
+    fill: var(--text-primary, #212121) !important;
+    stroke: var(--text-primary, #212121) !important;
+    opacity: 1 !important;
+}
+
+/* Settings panel / modal overlay */
+[data-testid="stModal"],
+[data-testid="stDialog"],
+div[role="dialog"] {
+    background: var(--card-bg, #ffffff) !important;
+    color: var(--text-primary, #212121) !important;
+}
+
+div[role="dialog"] label,
+div[role="dialog"] span,
+div[role="dialog"] p,
+div[role="dialog"] h1,
+div[role="dialog"] h2,
+div[role="dialog"] h3 {
+    color: var(--text-primary, #212121) !important;
+    -webkit-text-fill-color: var(--text-primary, #212121) !important;
+}
+
+/* Toggle / checkbox / radio inside settings */
+div[role="dialog"] [data-baseweb="checkbox"],
+div[role="dialog"] [data-baseweb="radio"],
+div[role="dialog"] [data-baseweb="toggle"],
+div[role="dialog"] input[type="checkbox"],
+div[role="dialog"] input[type="radio"] {
+    accent-color: var(--primary-color, #2196F3) !important;
+}
+
+/* Selectbox / dropdown inside dialogs */
+div[role="dialog"] [data-baseweb="select"],
+div[role="dialog"] [data-baseweb="popover"] {
+    background: var(--card-bg, #ffffff) !important;
+    color: var(--text-primary, #212121) !important;
+}
+
+/* Sidebar toggle button (collapse/expand) */
+[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="collapsedControl"] button,
+button[kind="header"] {
+    color: var(--text-primary, #212121) !important;
+    -webkit-text-fill-color: var(--text-primary, #212121) !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="collapsedControl"] svg {
+    fill: var(--text-primary, #212121) !important;
+    stroke: var(--text-primary, #212121) !important;
+}
+
+/* Menu items inside hamburger dropdown */
+[data-testid="stMainMenuPopover"],
+[data-testid="stMainMenuPopover"] ul,
+[data-testid="stMainMenuPopover"] li {
+    background: var(--card-bg, #ffffff) !important;
+    color: var(--text-primary, #212121) !important;
+}
+
+[data-testid="stMainMenuPopover"] li:hover {
+    background: rgba(33, 150, 243, 0.08) !important;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .main {
@@ -644,5 +731,50 @@ a:hover {
 
     .analytics-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+/* ===== Neutralize browser dark-mode for the entire app ===== */
+@media (prefers-color-scheme: dark) {
+    html, body, .stApp {
+        color-scheme: light !important;
+    }
+
+    [data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    header[data-testid="stHeader"] {
+        background: #f8f9fa !important;
+        color: #212121 !important;
+    }
+
+    [data-testid="stToolbar"] button,
+    [data-testid="stMainMenu"] button,
+    [data-testid="stSidebarCollapsedControl"] button,
+    header button {
+        color: #212121 !important;
+        -webkit-text-fill-color: #212121 !important;
+    }
+
+    [data-testid="stToolbar"] svg,
+    [data-testid="stMainMenu"] svg,
+    [data-testid="stSidebarCollapsedControl"] svg,
+    header svg {
+        fill: #212121 !important;
+        stroke: #212121 !important;
+    }
+
+    [data-testid="stSidebar"],
+    [data-testid="stSidebar"] > div {
+        background: #ffffff !important;
+        color: #212121 !important;
+    }
+
+    div[role="dialog"],
+    [data-testid="stModal"],
+    [data-testid="stMainMenuPopover"],
+    [data-testid="stMainMenuPopover"] ul,
+    [data-testid="stMainMenuPopover"] li {
+        background: #ffffff !important;
+        color: #212121 !important;
     }
 }

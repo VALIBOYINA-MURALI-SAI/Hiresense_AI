@@ -295,3 +295,69 @@ def normalize_github_user(raw: dict[str, Any], email: Optional[str]) -> dict[str
         "name": raw.get("name") or raw.get("login") or email,
         "picture": raw.get("avatar_url"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Persistent session tokens (cookie-based, HMAC-signed, 5-hour default TTL)
+# ---------------------------------------------------------------------------
+
+_SESSION_TOKEN_VER = 1
+
+
+def create_session_token(user: dict[str, Any], *, ttl_hours: float = 5) -> Optional[str]:
+    """Return a signed, URL-safe token encoding *user* with an expiry, or None if no signing key."""
+    key = oauth_state_signing_key()
+    if not key:
+        return None
+    payload = {
+        "v": _SESSION_TOKEN_VER,
+        "u": {k: user.get(k) for k in ("provider", "id", "email", "name", "picture")},
+        "exp": int(time.time() + ttl_hours * 3600),
+    }
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    p_b64 = _b64url_encode(raw)
+    sig = hmac.new(key, p_b64.encode("ascii"), hashlib.sha256).digest()
+    return f"s{_SESSION_TOKEN_VER}.{p_b64}.{_b64url_encode(sig)}"
+
+
+def create_guest_session_token(*, ttl_hours: float = 5) -> Optional[str]:
+    """Signed token for guest (no OAuth user) sessions."""
+    key = oauth_state_signing_key()
+    if not key:
+        return None
+    payload = {
+        "v": _SESSION_TOKEN_VER,
+        "guest": True,
+        "exp": int(time.time() + ttl_hours * 3600),
+    }
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    p_b64 = _b64url_encode(raw)
+    sig = hmac.new(key, p_b64.encode("ascii"), hashlib.sha256).digest()
+    return f"s{_SESSION_TOKEN_VER}.{p_b64}.{_b64url_encode(sig)}"
+
+
+def validate_session_token(token: str) -> Optional[dict[str, Any]]:
+    """
+    Validate a session token. Returns the payload dict (with key ``u`` for user
+    or ``guest`` for guest sessions), or None if invalid/expired.
+    """
+    key = oauth_state_signing_key()
+    if not key or not token or not str(token).startswith(f"s{_SESSION_TOKEN_VER}."):
+        return None
+    parts = str(token).split(".", 2)
+    if len(parts) != 3:
+        return None
+    _, p_b64, s_b64 = parts
+    try:
+        sig = _b64url_decode(s_b64)
+        expect = hmac.new(key, p_b64.encode("ascii"), hashlib.sha256).digest()
+        if not hmac.compare_digest(sig, expect):
+            return None
+        payload = json.loads(_b64url_decode(p_b64).decode("utf-8"))
+        if int(payload.get("v", 0)) != _SESSION_TOKEN_VER:
+            return None
+        if int(time.time()) > int(payload.get("exp", 0)):
+            return None
+        return payload
+    except Exception:
+        return None

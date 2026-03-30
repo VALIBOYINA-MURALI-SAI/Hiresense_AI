@@ -3,6 +3,7 @@ streamlit-option-menu
 streamlit-lottie
 streamlit-extras
 streamlit-custom-notification-box
+extra-streamlit-components
 python-docx
 pandas
 plotly
