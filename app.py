@@ -2830,9 +2830,9 @@ class ResumeApp:
                                 model_name = analysis["model"]
                                 model_class = "model-gemini" if "Gemini" in model_name else "model-claude" if "Claude" in model_name else ""
 
-                                # Format the date
+                                # Format the date (use module-level datetime; inner import would shadow
+                                # and break datetime.now() elsewhere in this function)
                                 try:
-                                    from datetime import datetime
                                     date_obj = datetime.strptime(
                                         analysis["date"], "%Y-%m-%d %H:%M:%S")
                                     formatted_date = date_obj.strftime(
