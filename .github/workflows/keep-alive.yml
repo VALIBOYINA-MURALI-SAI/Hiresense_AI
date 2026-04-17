@@ -2,9 +2,9 @@ name: Keep Streamlit Cloud Alive
 
 on:
   schedule:
-    # Every 30 minutes, 24/7. Streamlit Community Cloud sleeps after ~7 days
+    # Every 20 minutes, 24/7. Streamlit Community Cloud sleeps after ~7 days
     # of inactivity; periodic pings prevent that.
-    - cron: "*/30 * * * *"
+    - cron: "*/20 * * * *"
   workflow_dispatch: {}
 
 jobs:
