@@ -1,4 +1,3 @@
-// filepath: /D:/GIST/Hire-Sense-AI-Resume-Analyzer/.gitignore
 __pycache__/
 *.py[cod]
 *$py.class
@@ -145,8 +144,8 @@ resume_data.db
 *.xlsx
 *.xls
 
-# Local dev — keep .env out of git; bootstrap_env.py is tracked for Streamlit Cloud + local TLS/.env
-.env.example
+# Local secrets — never commit real keys. Copy from .env.example (which is tracked) to .env here or in utils/.
+# bootstrap_env.py loads: repo .env, then utils/.env (overrides), then process env.
 
 # One-off patch scripts (internal tooling only)
 scripts/patch_*.py

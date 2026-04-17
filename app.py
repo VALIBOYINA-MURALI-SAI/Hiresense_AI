@@ -2905,466 +2905,461 @@ class ResumeApp:
                                 key="analyze_ai_button")
 
                 if analyze_ai:
-                    with st.spinner(f"Analyzing your resume with {ai_model}..."):
-                        # Get file content
-                        text = ""
-                        try:
-                            if uploaded_file.type == "application/pdf":
-                                text = self.analyzer.extract_text_from_pdf(
-                                    uploaded_file)
-                            elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-                                text = self.analyzer.extract_text_from_docx(
-                                    uploaded_file)
-                            else:
-                                text = uploaded_file.getvalue().decode()
-                        except Exception as e:
-                            st.error(f"Error reading file: {str(e)}")
-                            st.stop()
+                    st.caption(
+                        "Free tier has separate daily limits per model — the app tries "
+                        "**gemini-2.5-flash** → **gemini-2.0-flash** → **gemini-2.5-flash-lite** when a model is quota-limited (429). "
+                        "Override with `GEMINI_MODEL_FALLBACKS` in `.env`."
+                    )
+                    gemini_progress_ph = st.empty()
 
-                        # Analyze with AI
-                        try:
-                            # Show a loading animation
-                            with st.spinner("🧠 AI is analyzing your resume..."):
-                                progress_bar = st.progress(0)
-                                
-                                # Get the selected model
-                                selected_model = "Google Gemini"
-                                
-                                # Update progress
-                                progress_bar.progress(10)
-                                
-                                # Extract text from the resume
-                                analyzer = AIResumeAnalyzer()
-                                if uploaded_file.type == "application/pdf":
-                                    resume_text = analyzer.extract_text_from_pdf(
-                                        uploaded_file)
-                                elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-                                    resume_text = analyzer.extract_text_from_docx(
-                                        uploaded_file)
-                                else:
-                                    # For text files or other formats
-                                    resume_text = uploaded_file.getvalue().decode('utf-8')
-                                
-                                # Initialize the AI analyzer (moved after text extraction)
-                                progress_bar.progress(30)
-                                
-                                # Get the job role
-                                job_role = selected_role if selected_role else "Not specified"
-                                
-                                # Update progress
-                                progress_bar.progress(50)
-                                
-                                # Analyze the resume with Google Gemini
-                                if use_custom_job_desc and custom_job_description:
-                                    # Use custom job description for analysis
-                                    analysis_result = analyzer.analyze_resume_with_gemini(
-                                        resume_text, job_role=job_role, job_description=custom_job_description)
-                                    # Show that custom job description was used
-                                    st.session_state['used_custom_job_desc'] = True
-                                else:
-                                    # Use standard role-based analysis
-                                    analysis_result = analyzer.analyze_resume_with_gemini(
-                                        resume_text, job_role=job_role)
-                                    st.session_state['used_custom_job_desc'] = False
+                    def _gem_progress(msg: str) -> None:
+                        gemini_progress_ph.markdown(msg)
 
+                    try:
+                        progress_bar = st.progress(0)
+                        selected_model = "Google Gemini"
+                        progress_bar.progress(5)
+
+                        analyzer = AIResumeAnalyzer()
+                        if uploaded_file.type == "application/pdf":
+                            resume_text = analyzer.extract_text_from_pdf(uploaded_file)
+                        elif (
+                            uploaded_file.type
+                            == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        ):
+                            resume_text = analyzer.extract_text_from_docx(uploaded_file)
+                        else:
+                            resume_text = uploaded_file.getvalue().decode("utf-8")
+
+                        progress_bar.progress(30)
+                        job_role = selected_role if selected_role else "Not specified"
+                        progress_bar.progress(45)
+
+                        if use_custom_job_desc and custom_job_description:
+                            analysis_result = analyzer.analyze_resume_with_gemini(
+                                resume_text,
+                                job_description=custom_job_description,
+                                job_role=job_role,
+                                progress_callback=_gem_progress,
+                            )
+                            st.session_state["used_custom_job_desc"] = True
+                        else:
+                            analysis_result = analyzer.analyze_resume_with_gemini(
+                                resume_text,
+                                job_role=job_role,
+                                progress_callback=_gem_progress,
+                            )
+                            st.session_state["used_custom_job_desc"] = False
+
+                        progress_bar.progress(80)
                                 
-                                # Update progress
-                                progress_bar.progress(80)
-                                
-                                # Save the analysis to the database
-                                if analysis_result and "error" not in analysis_result:
-                                    # Extract the resume score
-                                    resume_score = analysis_result.get(
-                                        "resume_score", 0)
+                        # Save the analysis to the database
+                        if analysis_result and "error" not in analysis_result:
+                            # Extract the resume score
+                            resume_score = analysis_result.get(
+                                "resume_score", 0)
                                     
-                                    # Save to database
-                                    save_ai_analysis_data(
-                                        None,  # No user_id needed
-                                        {
-                                            "model_used": selected_model,
-                                            "resume_score": resume_score,
-                                            "job_role": job_role
+                            # Save to database
+                            save_ai_analysis_data(
+                                None,  # No user_id needed
+                                {
+                                    "model_used": analysis_result.get(
+                                        "model_used", selected_model
+                                    ),
+                                    "resume_score": resume_score,
+                                    "job_role": job_role,
+                                },
+                            )
+
+                        # Complete the progress
+                        progress_bar.progress(100)
+
+                        # Display the analysis result
+                        if analysis_result and "error" not in analysis_result:
+                            gemini_progress_ph.empty()
+                            st.success("✅ Analysis complete!")
+                            st.snow()
+                                    
+                            # Extract data from the analysis
+                            full_response = analysis_result.get(
+                                "analysis", "")
+                            resume_score = analysis_result.get(
+                                "resume_score", 0)
+                            ats_score = analysis_result.get(
+                                "ats_score", 0)
+                            model_used = analysis_result.get(
+                                "model_used", selected_model)
+                                    
+                            # Store the full response in session state for download
+                            st.session_state['full_analysis'] = full_response
+                                    
+                            # Display the analysis in a nice format
+                            st.markdown("## Full Analysis Report")
+                                    
+                            # Get current date
+                            current_date = datetime.now().strftime("%B %d, %Y")
+                                    
+                            # Create a modern styled header for the report
+                            st.markdown(f"""
+                            <div style="background-color: var(--card-bg); border: 1px solid var(--card-border); padding: 20px; border-radius: 10px; margin-bottom: 20px; color: var(--text);">
+                                <h2 style="color: var(--text); margin-bottom: 10px;">AI Resume Analysis Report</h2>
+                                <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <p style="color: var(--text);"><strong>Job Role:</strong> {job_role if job_role else "Not specified"}</p>
+                                        <p style="color: var(--text);"><strong>Analysis Date:</strong> {current_date}</p>                                                                                                                                        </div>
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <p style="color: var(--text);"><strong>AI Model:</strong> {model_used}</p>
+                                        <p style="color: var(--text);"><strong>Overall Score:</strong> {resume_score}/100 - {"Excellent" if resume_score >= 80 else "Good" if resume_score >= 60 else "Needs Improvement"}</p>
+                                        {f'<p style="color: var(--accent);"><strong>✓ Custom Job Description Used</strong></p>' if st.session_state.get('used_custom_job_desc', False) else ''}
+                            </div>
+                            """, unsafe_allow_html=True)
+                                    
+                            # Add gauge charts for scores
+                            import plotly.graph_objects as go
+                                    
+                            col1, col2 = st.columns(2)
+                                    
+                            with col1:
+                                # Resume Score Gauge
+                                fig1 = go.Figure(go.Indicator(
+                                    mode="gauge+number",
+                                    value=resume_score,
+                                    domain={'x': [0, 1], 'y': [0, 1]},
+                                    title={'text': "Resume Score", 'font': {'size': 16}},
+                                    gauge={
+                                        'axis': {'range': [0, 100], 'tickwidth': 1},
+                                        'bar': {'color': "#4CAF50" if resume_score >= 80 else "#FFA500" if resume_score >= 60 else "#FF4444"},
+                                        'bgcolor': "white",
+                                        'borderwidth': 2,
+                                        'bordercolor': "gray",
+                                        'steps': [
+                                            {'range': [0, 40], 'color': 'rgba(255, 68, 68, 0.2)'},
+                                            {'range': [40, 60], 'color': 'rgba(255, 165, 0, 0.2)'},
+                                            {'range': [60, 80], 'color': 'rgba(255, 214, 0, 0.2)'},
+                                            {'range': [80, 100], 'color': 'rgba(76, 175, 80, 0.2)'}
+                                        ],
+                                        'threshold': {
+                                            'line': {'color': "red", 'width': 4},
+                                            'thickness': 0.75,
+                                            'value': 60
                                         }
-                                    )
-                                # show snowflake effect
-                                st.snow()
-
-                                # Complete the progress
-                                progress_bar.progress(100)
-                                
-                                # Display the analysis result
-                                if analysis_result and "error" not in analysis_result:
-                                    st.success("✅ Analysis complete!")
-                                    
-                                    # Extract data from the analysis
-                                    full_response = analysis_result.get(
-                                        "analysis", "")
-                                    resume_score = analysis_result.get(
-                                        "resume_score", 0)
-                                    ats_score = analysis_result.get(
-                                        "ats_score", 0)
-                                    model_used = analysis_result.get(
-                                        "model_used", selected_model)
-                                    
-                                    # Store the full response in session state for download
-                                    st.session_state['full_analysis'] = full_response
-                                    
-                                    # Display the analysis in a nice format
-                                    st.markdown("## Full Analysis Report")
-                                    
-                                    # Get current date
-                                    current_date = datetime.now().strftime("%B %d, %Y")
-                                    
-                                    # Create a modern styled header for the report
-                                    st.markdown(f"""
-                                    <div style="background-color: var(--card-bg); border: 1px solid var(--card-border); padding: 20px; border-radius: 10px; margin-bottom: 20px; color: var(--text);">
-                                        <h2 style="color: var(--text); margin-bottom: 10px;">AI Resume Analysis Report</h2>
-                                        <div style="display: flex; flex-wrap: wrap; gap: 20px;">
-                                            <div style="flex: 1; min-width: 200px;">
-                                                <p style="color: var(--text);"><strong>Job Role:</strong> {job_role if job_role else "Not specified"}</p>
-                                                <p style="color: var(--text);"><strong>Analysis Date:</strong> {current_date}</p>                                                                                                                                        </div>
-                                            <div style="flex: 1; min-width: 200px;">
-                                                <p style="color: var(--text);"><strong>AI Model:</strong> {model_used}</p>
-                                                <p style="color: var(--text);"><strong>Overall Score:</strong> {resume_score}/100 - {"Excellent" if resume_score >= 80 else "Good" if resume_score >= 60 else "Needs Improvement"}</p>
-                                                {f'<p style="color: var(--accent);"><strong>✓ Custom Job Description Used</strong></p>' if st.session_state.get('used_custom_job_desc', False) else ''}
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    
-                                    # Add gauge charts for scores
-                                    import plotly.graph_objects as go
-                                    
-                                    col1, col2 = st.columns(2)
-                                    
-                                    with col1:
-                                        # Resume Score Gauge
-                                        fig1 = go.Figure(go.Indicator(
-                                            mode="gauge+number",
-                                            value=resume_score,
-                                            domain={'x': [0, 1], 'y': [0, 1]},
-                                            title={'text': "Resume Score", 'font': {'size': 16}},
-                                            gauge={
-                                                'axis': {'range': [0, 100], 'tickwidth': 1},
-                                                'bar': {'color': "#4CAF50" if resume_score >= 80 else "#FFA500" if resume_score >= 60 else "#FF4444"},
-                                                'bgcolor': "white",
-                                                'borderwidth': 2,
-                                                'bordercolor': "gray",
-                                                'steps': [
-                                                    {'range': [0, 40], 'color': 'rgba(255, 68, 68, 0.2)'},
-                                                    {'range': [40, 60], 'color': 'rgba(255, 165, 0, 0.2)'},
-                                                    {'range': [60, 80], 'color': 'rgba(255, 214, 0, 0.2)'},
-                                                    {'range': [80, 100], 'color': 'rgba(76, 175, 80, 0.2)'}
-                                                ],
-                                                'threshold': {
-                                                    'line': {'color': "red", 'width': 4},
-                                                    'thickness': 0.75,
-                                                    'value': 60
-                                                }
-                                            }
-                                        ))
-                                        
-                                        fig1.update_layout(
-                                            height=250,
-                                            margin=dict(l=20, r=20, t=50, b=20),
-                                        )
-                                        
-                                        st.plotly_chart(fig1, width="stretch")
-                                        
-                                        status = "Excellent" if resume_score >= 80 else "Good" if resume_score >= 60 else "Needs Improvement"
-                                        st.markdown(f"<div style='text-align: center; font-weight: bold;'>{status}</div>", unsafe_allow_html=True)
-                                    
-                                    with col2:
-                                        # ATS Score Gauge
-                                        fig2 = go.Figure(go.Indicator(
-                                            mode="gauge+number",
-                                            value=ats_score,
-                                            domain={'x': [0, 1], 'y': [0, 1]},
-                                            title={'text': "ATS Optimization Score", 'font': {'size': 16}},
-                                            gauge={
-                                                'axis': {'range': [0, 100], 'tickwidth': 1},
-                                                'bar': {'color': "#4CAF50" if ats_score >= 80 else "#FFA500" if ats_score >= 60 else "#FF4444"},
-                                                'bgcolor': "white",
-                                                'borderwidth': 2,
-                                                'bordercolor': "gray",
-                                                'steps': [
-                                                    {'range': [0, 40], 'color': 'rgba(255, 68, 68, 0.2)'},
-                                                    {'range': [40, 60], 'color': 'rgba(255, 165, 0, 0.2)'},
-                                                    {'range': [60, 80], 'color': 'rgba(255, 214, 0, 0.2)'},
-                                                    {'range': [80, 100], 'color': 'rgba(76, 175, 80, 0.2)'}
-                                                ],
-                                                'threshold': {
-                                                    'line': {'color': "red", 'width': 4},
-                                                    'thickness': 0.75,
-                                                    'value': 60
-                                                }
-                                            }
-                                        ))
-                                        
-                                        fig2.update_layout(
-                                            height=250,
-                                            margin=dict(l=20, r=20, t=50, b=20),
-                                        )
-                                        
-                                        st.plotly_chart(fig2, width="stretch")
-                                        
-                                        status = "Excellent" if ats_score >= 80 else "Good" if ats_score >= 60 else "Needs Improvement"
-                                        st.markdown(f"<div style='text-align: center; font-weight: bold;'>{status}</div>", unsafe_allow_html=True)
-
-                                    # Add Job Description Match Score if custom job description was used
-                                    if st.session_state.get('used_custom_job_desc', False) and custom_job_description:
-                                        # Extract job match score from analysis result or calculate it
-                                        job_match_score = analysis_result.get("job_match_score", 0)
-                                        if not job_match_score and "job_match" in analysis_result:
-                                            job_match_score = analysis_result["job_match"].get("score", 0)
-                                        
-                                        # If we have a job match score, display it
-                                        if job_match_score:
-                                            st.markdown("""
-                                            <h3 style="background: linear-gradient(90deg, #4d7c0f, #84cc16); color: var(--text-contrast); padding: 10px; border-radius: 5px; margin-top: 20px;">
-                                                <i class="fas fa-handshake"></i> Job Description Match Analysis
-                                            </h3>
-                                            """, unsafe_allow_html=True)
-                                            
-                                            col1, col2 = st.columns(2)
-                                            
-                                            with col1:
-                                                # Job Match Score Gauge
-                                                fig3 = go.Figure(go.Indicator(
-                                                    mode="gauge+number",
-                                                    value=job_match_score,
-                                                    domain={'x': [0, 1], 'y': [0, 1]},
-                                                    title={'text': "Job Match Score", 'font': {'size': 16}},
-                                                    gauge={
-                                                        'axis': {'range': [0, 100], 'tickwidth': 1},
-                                                        'bar': {'color': "#4CAF50" if job_match_score >= 80 else "#FFA500" if job_match_score >= 60 else "#FF4444"},
-                                                        'bgcolor': "white",
-                                                        'borderwidth': 2,
-                                                        'bordercolor': "gray",
-                                                        'steps': [
-                                                            {'range': [0, 40], 'color': 'rgba(255, 68, 68, 0.2)'},
-                                                            {'range': [40, 60], 'color': 'rgba(255, 165, 0, 0.2)'},
-                                                            {'range': [60, 80], 'color': 'rgba(255, 214, 0, 0.2)'},
-                                                            {'range': [80, 100], 'color': 'rgba(76, 175, 80, 0.2)'}
-                                                        ],
-                                                        'threshold': {
-                                                            'line': {'color': "red", 'width': 4},
-                                                            'thickness': 0.75,
-                                                            'value': 60
-                                                        }
-                                                    }
-                                                ))
-                                                
-                                                fig3.update_layout(
-                                                    height=250,
-                                                    margin=dict(l=20, r=20, t=50, b=20),
-                                                )
-                                                
-                                                st.plotly_chart(fig3, width="stretch")
-                                                
-                                                match_status = "Excellent Match" if job_match_score >= 80 else "Good Match" if job_match_score >= 60 else "Low Match"
-                                                st.markdown(f"<div style='text-align: center; font-weight: bold;'>{match_status}</div>", unsafe_allow_html=True)
-                                            
-                                            with col2:
-                                                st.markdown("""
-                                                <div style="background-color: var(--card-bg); border: 1px solid var(--card-border); padding: 20px; border-radius: 10px; height: 100%; color: var(--text);">
-                                                    <h4 style="color: var(--text); margin-bottom: 15px;">What This Means</h4>
-                                                    <p style="color: var(--text);">This score represents how well your resume matches the specific job description you provided.</p>
-                                                    <ul style="color: var(--text); padding-left: 20px;">
-                                                        <li><strong>80-100:</strong> Excellent match - your resume is highly aligned with this job</li>
-                                                        <li><strong>60-79:</strong> Good match - your resume matches many requirements</li>
-                                                        <li><strong>Below 60:</strong> Consider tailoring your resume more specifically to this job</li>
-                                                    </ul>
-                                                </div>
-                                                """, unsafe_allow_html=True)
-                                    
-
-                                    # Format the full response with better styling
-                                    formatted_analysis = full_response
-                                    
-                                    # Replace section headers with styled headers
-                                    section_styles = {
-                                        "## Overall Assessment": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #1e3a8a, #3b82f6); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-chart-line"></i> Overall Assessment
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Professional Profile Analysis": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #047857, #10b981); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-user-tie"></i> Professional Profile Analysis
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Skills Analysis": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #4f46e5, #818cf8); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-tools"></i> Skills Analysis
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Experience Analysis": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #9f1239, #e11d48); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-briefcase"></i> Experience Analysis
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Education Analysis": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #854d0e, #eab308); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-graduation-cap"></i> Education Analysis
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Key Strengths": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #166534, #22c55e); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-check-circle"></i> Key Strengths
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Areas for Improvement": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #9f1239, #fb7185); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-exclamation-circle"></i> Areas for Improvement
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## ATS Optimization Assessment": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #0e7490, #06b6d4); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-robot"></i> ATS Optimization Assessment
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Recommended Courses": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #5b21b6, #8b5cf6); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-book"></i> Recommended Courses
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Resume Score": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #0369a1, #0ea5e9); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-star"></i> Resume Score
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Role Alignment Analysis": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #7c2d12, #ea580c); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-bullseye"></i> Role Alignment Analysis
-                                            </h3>
-                                            <div class="section-content">""",
-                                            
-                                        "## Job Match Analysis": """<div class="report-section">
-                                            <h3 style="background: linear-gradient(90deg, #4d7c0f, #84cc16); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
-                                                <i class="fas fa-handshake"></i> Job Match Analysis
-                                            </h3>
-                                            <div class="section-content">""",
                                     }
-                                    
-                                    # Apply the styling to each section
-                                    for section, style in section_styles.items():
-                                        if section in formatted_analysis:
-                                            formatted_analysis = formatted_analysis.replace(
-                                                section, style)
-                                            # Add closing div tags
-                                            next_section = False
-                                            for next_sec in section_styles.keys():
-                                                if next_sec != section and next_sec in formatted_analysis.split(style)[1]:
-                                                    split_text = formatted_analysis.split(style)[1].split(next_sec)
-                                                    formatted_analysis = formatted_analysis.split(style)[0] + style + split_text[0] + "</div></div>" + next_sec + "".join(split_text[1:])
-                                                    next_section = True
-                                                    break
-                                            if not next_section:
-                                                formatted_analysis = formatted_analysis + "</div></div>"
-                                    
-                                    # Remove any extra closing div tags that might have been added
-                                    formatted_analysis = formatted_analysis.replace("</div></div></div></div>", "</div></div>")
-                                    
-                                    # Ensure we don't have any orphaned closing tags at the end
-                                    if formatted_analysis.endswith("</div>"):
-                                        # Count opening and closing div tags
-                                        open_tags = formatted_analysis.count("<div")
-                                        close_tags = formatted_analysis.count("</div>")
+                                ))
                                         
-                                        # If we have more closing than opening tags, remove the extras
-                                        if close_tags > open_tags:
-                                            excess = close_tags - open_tags
-                                            formatted_analysis = formatted_analysis[:-6 * excess]
+                                fig1.update_layout(
+                                    height=250,
+                                    margin=dict(l=20, r=20, t=50, b=20),
+                                )
+                                        
+                                st.plotly_chart(fig1, width="stretch")
+                                        
+                                status = "Excellent" if resume_score >= 80 else "Good" if resume_score >= 60 else "Needs Improvement"
+                                st.markdown(f"<div style='text-align: center; font-weight: bold;'>{status}</div>", unsafe_allow_html=True)
                                     
-                                    # Clean up any visible HTML tags that might appear in the text
-                                    formatted_analysis = formatted_analysis.replace("&lt;/div&gt;", "")
-                                    formatted_analysis = formatted_analysis.replace("&lt;div&gt;", "")
-                                    formatted_analysis = formatted_analysis.replace("<div>", "<div>")  # Ensure proper opening
-                                    formatted_analysis = formatted_analysis.replace("</div>", "</div>")  # Ensure proper closing
-                                    
-                                    # Add CSS for the report
+                            with col2:
+                                # ATS Score Gauge
+                                fig2 = go.Figure(go.Indicator(
+                                    mode="gauge+number",
+                                    value=ats_score,
+                                    domain={'x': [0, 1], 'y': [0, 1]},
+                                    title={'text': "ATS Optimization Score", 'font': {'size': 16}},
+                                    gauge={
+                                        'axis': {'range': [0, 100], 'tickwidth': 1},
+                                        'bar': {'color': "#4CAF50" if ats_score >= 80 else "#FFA500" if ats_score >= 60 else "#FF4444"},
+                                        'bgcolor': "white",
+                                        'borderwidth': 2,
+                                        'bordercolor': "gray",
+                                        'steps': [
+                                            {'range': [0, 40], 'color': 'rgba(255, 68, 68, 0.2)'},
+                                            {'range': [40, 60], 'color': 'rgba(255, 165, 0, 0.2)'},
+                                            {'range': [60, 80], 'color': 'rgba(255, 214, 0, 0.2)'},
+                                            {'range': [80, 100], 'color': 'rgba(76, 175, 80, 0.2)'}
+                                        ],
+                                        'threshold': {
+                                            'line': {'color': "red", 'width': 4},
+                                            'thickness': 0.75,
+                                            'value': 60
+                                        }
+                                    }
+                                ))
+                                        
+                                fig2.update_layout(
+                                    height=250,
+                                    margin=dict(l=20, r=20, t=50, b=20),
+                                )
+                                        
+                                st.plotly_chart(fig2, width="stretch")
+                                        
+                                status = "Excellent" if ats_score >= 80 else "Good" if ats_score >= 60 else "Needs Improvement"
+                                st.markdown(f"<div style='text-align: center; font-weight: bold;'>{status}</div>", unsafe_allow_html=True)
+
+                            # Add Job Description Match Score if custom job description was used
+                            if st.session_state.get('used_custom_job_desc', False) and custom_job_description:
+                                # Extract job match score from analysis result or calculate it
+                                job_match_score = analysis_result.get("job_match_score", 0)
+                                if not job_match_score and "job_match" in analysis_result:
+                                    job_match_score = analysis_result["job_match"].get("score", 0)
+                                        
+                                # If we have a job match score, display it
+                                if job_match_score:
                                     st.markdown("""
-                                    <style>
-                                        .report-section {
-                                            margin-bottom: 25px;
-                                            border: 1px solid var(--card-border);
-                                            border-radius: 8px;
-                                            overflow: hidden;
-                                        }
-                                        .section-content {
-                                            padding: 15px;
-                                            background-color: var(--card-bg);
-                                            color: var(--text);
-                                        }
-                                        .report-section h3 {
-                                            margin-top: 0;
-                                            font-weight: 600;
-                                        }
-                                        .report-section ul {
-                                            padding-left: 20px;
-                                        }
-                                        .report-section p {
-                                            color: var(--text);
-                                            margin-bottom: 10px;
-                                        }
-                                        .report-section li {
-                                            color: var(--text);
-                                            margin-bottom: 5px;
-                                        }
-                                    </style>
+                                    <h3 style="background: linear-gradient(90deg, #4d7c0f, #84cc16); color: var(--text-contrast); padding: 10px; border-radius: 5px; margin-top: 20px;">
+                                        <i class="fas fa-handshake"></i> Job Description Match Analysis
+                                    </h3>
                                     """, unsafe_allow_html=True)
-
-                                    # Display the formatted analysis
-                                    st.markdown(f"""
-                                    <div style="background-color: var(--card-bg); padding: 20px; border-radius: 10px; border: 1px solid var(--card-border); color: var(--text);">
-                                        {formatted_analysis}
-                                    </div>
-                                    """, unsafe_allow_html=True)
-
-                                    # Create a PDF report
-                                    pdf_buffer = self.ai_analyzer.generate_pdf_report(
-                                        analysis_result={
-                                            "score": resume_score,
-                                            "ats_score": ats_score,
-                                            "model_used": model_used,
-                                            "full_response": full_response,
-                                            "strengths": analysis_result.get("strengths", []),
-                                            "weaknesses": analysis_result.get("weaknesses", []),
-                                            "used_custom_job_desc": st.session_state.get('used_custom_job_desc', False),
-                                            "custom_job_description": custom_job_description if st.session_state.get('used_custom_job_desc', False) else ""
-                                        },
-                                        candidate_name=st.session_state.get(
-                                            'candidate_name', 'Candidate'),
-                                        job_role=selected_role
-                                    )
-
-                                    # PDF download button
-                                    if pdf_buffer:
-                                        st.download_button(
-                                            label="📊 Download PDF Report",
-                                            data=pdf_buffer,
-                                            file_name=f"resume_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                                            mime="application/pdf",
-                                            width="stretch",
-                                            on_click=lambda: st.balloons()
+                                            
+                                    col1, col2 = st.columns(2)
+                                            
+                                    with col1:
+                                        # Job Match Score Gauge
+                                        fig3 = go.Figure(go.Indicator(
+                                            mode="gauge+number",
+                                            value=job_match_score,
+                                            domain={'x': [0, 1], 'y': [0, 1]},
+                                            title={'text': "Job Match Score", 'font': {'size': 16}},
+                                            gauge={
+                                                'axis': {'range': [0, 100], 'tickwidth': 1},
+                                                'bar': {'color': "#4CAF50" if job_match_score >= 80 else "#FFA500" if job_match_score >= 60 else "#FF4444"},
+                                                'bgcolor': "white",
+                                                'borderwidth': 2,
+                                                'bordercolor': "gray",
+                                                'steps': [
+                                                    {'range': [0, 40], 'color': 'rgba(255, 68, 68, 0.2)'},
+                                                    {'range': [40, 60], 'color': 'rgba(255, 165, 0, 0.2)'},
+                                                    {'range': [60, 80], 'color': 'rgba(255, 214, 0, 0.2)'},
+                                                    {'range': [80, 100], 'color': 'rgba(76, 175, 80, 0.2)'}
+                                                ],
+                                                'threshold': {
+                                                    'line': {'color': "red", 'width': 4},
+                                                    'thickness': 0.75,
+                                                    'value': 60
+                                                }
+                                            }
+                                        ))
+                                                
+                                        fig3.update_layout(
+                                            height=250,
+                                            margin=dict(l=20, r=20, t=50, b=20),
                                         )
-                                    else:
-                                        st.error("PDF generation failed. Please try again later.")
-                                else:
-                                    st.error(f"Analysis failed: {analysis_result.get('error', 'Unknown error')}")
-                        except Exception as ai_error:
-                            st.error(f"Error during AI analysis: {str(ai_error)}")
-                            import traceback as tb
-                            st.code(tb.format_exc())
+                                                
+                                        st.plotly_chart(fig3, width="stretch")
+                                                
+                                        match_status = "Excellent Match" if job_match_score >= 80 else "Good Match" if job_match_score >= 60 else "Low Match"
+                                        st.markdown(f"<div style='text-align: center; font-weight: bold;'>{match_status}</div>", unsafe_allow_html=True)
+                                            
+                                    with col2:
+                                        st.markdown("""
+                                        <div style="background-color: var(--card-bg); border: 1px solid var(--card-border); padding: 20px; border-radius: 10px; height: 100%; color: var(--text);">
+                                            <h4 style="color: var(--text); margin-bottom: 15px;">What This Means</h4>
+                                            <p style="color: var(--text);">This score represents how well your resume matches the specific job description you provided.</p>
+                                            <ul style="color: var(--text); padding-left: 20px;">
+                                                <li><strong>80-100:</strong> Excellent match - your resume is highly aligned with this job</li>
+                                                <li><strong>60-79:</strong> Good match - your resume matches many requirements</li>
+                                                <li><strong>Below 60:</strong> Consider tailoring your resume more specifically to this job</li>
+                                            </ul>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                    
+
+                            # Format the full response with better styling
+                            formatted_analysis = full_response
+                                    
+                            # Replace section headers with styled headers
+                            section_styles = {
+                                "## Overall Assessment": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #1e3a8a, #3b82f6); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-chart-line"></i> Overall Assessment
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Professional Profile Analysis": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #047857, #10b981); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-user-tie"></i> Professional Profile Analysis
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Skills Analysis": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #4f46e5, #818cf8); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-tools"></i> Skills Analysis
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Experience Analysis": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #9f1239, #e11d48); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-briefcase"></i> Experience Analysis
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Education Analysis": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #854d0e, #eab308); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-graduation-cap"></i> Education Analysis
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Key Strengths": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #166534, #22c55e); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-check-circle"></i> Key Strengths
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Areas for Improvement": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #9f1239, #fb7185); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-exclamation-circle"></i> Areas for Improvement
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## ATS Optimization Assessment": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #0e7490, #06b6d4); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-robot"></i> ATS Optimization Assessment
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Recommended Courses": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #5b21b6, #8b5cf6); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-book"></i> Recommended Courses
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Resume Score": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #0369a1, #0ea5e9); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-star"></i> Resume Score
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Role Alignment Analysis": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #7c2d12, #ea580c); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-bullseye"></i> Role Alignment Analysis
+                                    </h3>
+                                    <div class="section-content">""",
+                                            
+                                "## Job Match Analysis": """<div class="report-section">
+                                    <h3 style="background: linear-gradient(90deg, #4d7c0f, #84cc16); color: var(--text-contrast); padding: 10px; border-radius: 5px;">
+                                        <i class="fas fa-handshake"></i> Job Match Analysis
+                                    </h3>
+                                    <div class="section-content">""",
+                            }
+                                    
+                            # Apply the styling to each section
+                            for section, style in section_styles.items():
+                                if section in formatted_analysis:
+                                    formatted_analysis = formatted_analysis.replace(
+                                        section, style)
+                                    # Add closing div tags
+                                    next_section = False
+                                    for next_sec in section_styles.keys():
+                                        if next_sec != section and next_sec in formatted_analysis.split(style)[1]:
+                                            split_text = formatted_analysis.split(style)[1].split(next_sec)
+                                            formatted_analysis = formatted_analysis.split(style)[0] + style + split_text[0] + "</div></div>" + next_sec + "".join(split_text[1:])
+                                            next_section = True
+                                            break
+                                    if not next_section:
+                                        formatted_analysis = formatted_analysis + "</div></div>"
+                                    
+                            # Remove any extra closing div tags that might have been added
+                            formatted_analysis = formatted_analysis.replace("</div></div></div></div>", "</div></div>")
+                                    
+                            # Ensure we don't have any orphaned closing tags at the end
+                            if formatted_analysis.endswith("</div>"):
+                                # Count opening and closing div tags
+                                open_tags = formatted_analysis.count("<div")
+                                close_tags = formatted_analysis.count("</div>")
+                                        
+                                # If we have more closing than opening tags, remove the extras
+                                if close_tags > open_tags:
+                                    excess = close_tags - open_tags
+                                    formatted_analysis = formatted_analysis[:-6 * excess]
+                                    
+                            # Clean up any visible HTML tags that might appear in the text
+                            formatted_analysis = formatted_analysis.replace("&lt;/div&gt;", "")
+                            formatted_analysis = formatted_analysis.replace("&lt;div&gt;", "")
+                            formatted_analysis = formatted_analysis.replace("<div>", "<div>")  # Ensure proper opening
+                            formatted_analysis = formatted_analysis.replace("</div>", "</div>")  # Ensure proper closing
+                                    
+                            # Add CSS for the report
+                            st.markdown("""
+                            <style>
+                                .report-section {
+                                    margin-bottom: 25px;
+                                    border: 1px solid var(--card-border);
+                                    border-radius: 8px;
+                                    overflow: hidden;
+                                }
+                                .section-content {
+                                    padding: 15px;
+                                    background-color: var(--card-bg);
+                                    color: var(--text);
+                                    white-space: pre-wrap;
+                                }
+                                .report-section h3 {
+                                    margin-top: 0;
+                                    font-weight: 600;
+                                }
+                                .report-section ul {
+                                    padding-left: 20px;
+                                }
+                                .report-section p {
+                                    color: var(--text);
+                                    margin-bottom: 10px;
+                                }
+                                .report-section li {
+                                    color: var(--text);
+                                    margin-bottom: 5px;
+                                }
+                            </style>
+                            """, unsafe_allow_html=True)
+
+                            # Display the formatted analysis
+                            st.markdown(f"""
+                            <div style="background-color: var(--card-bg); padding: 20px; border-radius: 10px; border: 1px solid var(--card-border); color: var(--text);">
+                                {formatted_analysis}
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                            # Create a PDF report
+                            pdf_buffer = self.ai_analyzer.generate_pdf_report(
+                                analysis_result={
+                                    "score": resume_score,
+                                    "ats_score": ats_score,
+                                    "model_used": model_used,
+                                    "full_response": full_response,
+                                    "strengths": analysis_result.get("strengths", []),
+                                    "weaknesses": analysis_result.get("weaknesses", []),
+                                    "used_custom_job_desc": st.session_state.get('used_custom_job_desc', False),
+                                    "custom_job_description": custom_job_description if st.session_state.get('used_custom_job_desc', False) else ""
+                                },
+                                candidate_name=st.session_state.get(
+                                    'candidate_name', 'Candidate'),
+                                job_role=selected_role
+                            )
+
+                            # PDF download button
+                            if pdf_buffer:
+                                st.download_button(
+                                    label="📊 Download PDF Report",
+                                    data=pdf_buffer,
+                                    file_name=f"resume_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                    mime="application/pdf",
+                                    width="stretch",
+                                    on_click=lambda: st.balloons()
+                                )
+                            else:
+                                st.error("PDF generation failed. Please try again later.")
+                        else:
+                            err = analysis_result.get("error", "Unknown error")
+                            ek = analysis_result.get("error_kind")
+                            if ek == "rate_limit":
+                                st.warning(err)
+                                if analysis_result.get("detail"):
+                                    with st.expander("Technical details"):
+                                        st.code(str(analysis_result["detail"]))
+                            elif ek == "timeout":
+                                st.warning(err)
+                            else:
+                                st.error(f"Analysis failed: {err}")
+                    except Exception as ai_error:
+                        st.error(f"Error during AI analysis: {str(ai_error)}")
+                        import traceback as tb
+                        st.code(tb.format_exc())
 
 
 

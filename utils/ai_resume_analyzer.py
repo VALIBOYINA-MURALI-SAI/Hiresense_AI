@@ -19,6 +19,98 @@ import json
 import math
 import re
 
+from .analysis_markdown_structure import structure_analysis_markdown
+from .gemini_rate_limit import (
+    gemini_model_fallback_chain,
+    is_model_unavailable_error,
+    is_rate_limit_error,
+)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(2000, int(raw))
+    except ValueError:
+        return default
+
+
+def _truncate_for_llm(label: str, text: str, max_chars: int) -> tuple:
+    if not text or len(text) <= max_chars:
+        return text, False
+    head = max(2000, max_chars // 2 - 40)
+    tail = max_chars - head - 120
+    if tail < 800:
+        tail = 800
+        head = max(2000, max_chars - tail - 120)
+    truncated = (
+        f"[{label} truncated from {len(text)} chars for API limits]\n"
+        f"{text[:head]}\n\n[... middle omitted ...]\n\n{text[-tail:]}"
+    )
+    return truncated, True
+
+
+def _extract_skills_lines_from_block(
+    block: str,
+    clean_markdown_fn,
+    *,
+    full_block_fallback: bool = False,
+    strip_leading_label_re: str | None = None,
+) -> list:
+    """
+    Parse bullet lines from a Skills subsection (Current / Missing). If the model
+    writes prose without '-/*'/• (common under Missing Skills), include those lines
+    or the whole subsection as a last resort.
+    """
+    if not block or not str(block).strip():
+        return []
+    block = str(block).split("##")[0]
+    out = []
+    for line in block.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("##"):
+            break
+        low = s.lower()
+        if low.startswith("skill proficiency") and "proficiency" in low[:20]:
+            continue
+        if "-" in s or "•" in s or "*" in s:
+            skill = clean_markdown_fn(
+                s.replace("-", "").replace("*", "").replace("•", "").strip()
+            )
+            if skill:
+                out.append(skill)
+        elif len(s) >= 12:
+            skill = clean_markdown_fn(s)
+            if skill:
+                out.append(skill)
+    if not out and full_block_fallback and block.strip():
+        blob = clean_markdown_fn(block.strip())
+        if strip_leading_label_re:
+            blob = re.sub(
+                strip_leading_label_re, "", blob.strip(), count=1, flags=re.IGNORECASE | re.DOTALL
+            )
+        blob = blob.strip()
+        if blob:
+            out.append(blob)
+    return out
+
+
+def _clean_text_for_skill_extract(text: str) -> str:
+    """Light cleanup for skill extraction outside PDF (matches PDF clean_markdown essentials)."""
+    if not text:
+        return ""
+    text = re.sub(r"<strong>([^<]*)</strong>", r"\1", text, flags=re.IGNORECASE)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.*?)\*", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = text.replace("&nbsp;", " ").replace("&#160;", " ")
+    return text.strip()
+
 
 class AIResumeAnalyzer:
     def __init__(self):
@@ -211,19 +303,73 @@ class AIResumeAnalyzer:
         
         os.unlink(temp_path)  # Clean up the temp file
         return text
-    
-    def analyze_resume_with_gemini(self, resume_text, job_description=None, job_role=None):
-        """Analyze resume using Google Gemini AI"""
-        if not resume_text:
-            return {"error": "Resume text is required for analysis."}
-        
-        if not self.google_api_key:
-            return {"error": "Google API key is not configured. Please add it to your .env file."}
-        
-        try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            
-            base_prompt = f"""
+
+    def _build_gemini_analysis_prompt(
+        self, resume_text: str, job_role=None, job_description=None, *, compact: bool
+    ) -> str:
+        """Same sections as before; *compact* uses shorter instructions to reduce tokens."""
+        if compact:
+            core = f"""You are an expert resume analyst. Answer in markdown with EXACTLY these section headings (do not skip sections):
+
+## Overall Assessment
+2–4 sentences: quality, structure, first impression.
+
+## Professional Profile Analysis
+Career story, trajectory, fit for stated goals.
+
+## Skills Analysis
+- **Current Skills**: Bullet list grouped (technical / soft / domain).
+- **Skill Proficiency**: Brief assessment of depth.
+- **Missing Skills**: Gaps for the target path.
+
+## Experience Analysis
+Action verbs, metrics, relevance; concrete improvements.
+
+## Education Analysis
+Degrees, certs, gaps.
+
+## Key Strengths
+5–7 bullets.
+
+## Areas for Improvement
+5–7 actionable bullets.
+
+## ATS Optimization Assessment
+Include the line **ATS Score: XX/100** (0–100) then brief keyword/format tips.
+
+## Recommended Courses
+5–7 items with one line each on why.
+
+## Resume Score
+Exactly one line: **Resume Score: XX/100** (0–100). Align with sections above.
+
+---
+Resume:
+{resume_text}
+"""
+            if job_role:
+                core += f"""
+---
+Target role: {job_role}
+
+## Role Alignment Analysis
+Alignment vs **{job_role}**; concrete edits to tailor the resume.
+"""
+            if job_description:
+                core += f"""
+---
+Job description / role context:
+{job_description}
+
+## Job Match Analysis
+Fit summary; note a rough **match percentage** if helpful.
+
+## Key Job Requirements Not Met
+Bullets: requirement → gap → fix.
+"""
+            return core
+
+        base_prompt = f"""
             You are an expert resume analyst with deep knowledge of industry standards, job requirements, and hiring practices across various fields. Your task is to provide a comprehensive, detailed analysis of the resume provided.
             
             Please structure your response in the following format:
@@ -263,18 +409,18 @@ class AIResumeAnalyzer:
             Resume:
             {resume_text}
             """
-            
-            if job_role:
-                base_prompt += f"""
+
+        if job_role:
+            base_prompt += f"""
                 
                 The candidate is targeting a role as: {job_role}
                 
                 ## Role Alignment Analysis
                 [Analyze how well the resume aligns with the target role of {job_role}. Provide specific recommendations to better align the resume with this role.]
                 """
-            
-            if job_description:
-                base_prompt += f"""
+
+        if job_description:
+            base_prompt += f"""
                 
                 Additionally, compare this resume to the following job description:
                 
@@ -287,44 +433,138 @@ class AIResumeAnalyzer:
                 ## Key Job Requirements Not Met
                 [List specific requirements from the job description that are not addressed in the resume, with recommendations on how to address each gap]
                 """
-            
-            import time as _time
+        return base_prompt
 
-            last_err = None
-            for attempt in range(3):
+    def analyze_resume_with_gemini(
+        self, resume_text, job_description=None, job_role=None, progress_callback=None
+    ):
+        """Gemini analysis: free-tier-sized input/output by default; optional model fallbacks from env."""
+
+        def _pc(msg: str) -> None:
+            if progress_callback:
+                try:
+                    progress_callback(msg)
+                except Exception:
+                    pass
+
+        if not resume_text:
+            return {"error": "Resume text is required for analysis."}
+
+        if not self.google_api_key:
+            return {"error": "Google API key is not configured. Please add it to your .env file."}
+
+        # Defaults sized for Gemini free tier (smaller input = fewer failures / rate limits).
+        max_resume = _env_int("HIRERESUME_RESUME_MAX_CHARS", 12000)
+        max_job = _env_int("HIRERESUME_JOB_DESC_MAX_CHARS", 3000)
+        resume_body, _trunc_r = _truncate_for_llm("Resume", resume_text.strip(), max_resume)
+        jd = job_description
+        if jd:
+            jd, _trunc_j = _truncate_for_llm("Job context", str(jd).strip(), max_job)
+
+        verbose = os.environ.get("HIRERESUME_VERBOSE_GEMINI_PROMPT", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        base_prompt = self._build_gemini_analysis_prompt(
+            resume_body, job_role=job_role, job_description=jd, compact=not verbose
+        )
+
+        generation_config = None
+        try:
+            # Default 4096 suits free tier; raise via GEMINI_MAX_OUTPUT_TOKENS if your plan allows.
+            max_out = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", "4096") or "4096")
+            max_out = max(1024, min(8192, max_out))
+            generation_config = genai.GenerationConfig(
+                max_output_tokens=max_out,
+                temperature=0.35,
+            )
+        except Exception:
+            pass
+
+        import time as _time
+
+        models = gemini_model_fallback_chain()
+        last_err = None
+
+        for mi, model_name in enumerate(models):
+            _pc(f"Trying **{model_name}** ({mi + 1}/{len(models)})…")
+            try:
+                kwargs = {"model_name": model_name}
+                if generation_config is not None:
+                    kwargs["generation_config"] = generation_config
+                model = genai.GenerativeModel(**kwargs)
+            except Exception as ex:
+                last_err = ex
+                if is_model_unavailable_error(ex):
+                    continue
+                return {"error": f"Analysis failed: {str(ex)}"}
+
+            for attempt in range(2):
                 try:
                     response = model.generate_content(
                         base_prompt,
                         request_options={"timeout": 120},
                     )
-                    analysis = response.text.strip()
-
+                    try:
+                        analysis = (response.text or "").strip()
+                    except Exception:
+                        analysis = ""
+                    if not analysis:
+                        last_err = RuntimeError("Empty or blocked model response")
+                        break
+                    analysis = structure_analysis_markdown(analysis)
                     resume_score = self._extract_score_from_text(analysis)
                     ats_score = self._extract_ats_score_from_text(analysis)
-
                     return {
                         "analysis": analysis,
                         "resume_score": resume_score,
                         "ats_score": ats_score,
-                        "model_used": "Google Gemini",
+                        "model_used": f"Google Gemini ({model_name})",
                     }
                 except Exception as retry_err:
                     last_err = retry_err
-                    if attempt < 2:
-                        _time.sleep(2 ** attempt)
+                    if is_model_unavailable_error(retry_err):
+                        break
+                    if is_rate_limit_error(retry_err):
+                        _pc(f"Rate limited on **{model_name}** — trying next model…")
+                        break
+                    if attempt < 1:
+                        _time.sleep(2**attempt)
+                        continue
+                    break
 
-            err_msg = str(last_err)
-            if any(k in err_msg.lower() for k in ("deadline", "timeout", "timed out", "unavailable", "connection")):
-                return {
-                    "error": (
-                        "The AI service did not respond in time — this is usually caused by a slow or "
-                        "unstable internet connection. Please check your network and try again."
-                    )
-                }
-            return {"error": f"Analysis failed: {err_msg}"}
+        if last_err is None:
+            return {"error": "Analysis failed: no Gemini model could be reached.", "error_kind": "unknown"}
 
-        except Exception as e:
-            return {"error": f"Analysis failed: {str(e)}"}
+        err_msg = str(last_err)
+        if is_rate_limit_error(last_err):
+            doc = "https://ai.google.dev/gemini-api/docs/rate-limits"
+            return {
+                "error": (
+                    "Gemini free-tier quota was exceeded for every model in your fallback list "
+                    "(limits are often per-model per day). Try again later, enable billing for higher limits, "
+                    "or set `GEMINI_MODEL_FALLBACKS` in `.env` with additional model IDs. Details: "
+                    + doc
+                ),
+                "error_kind": "rate_limit",
+                "detail": err_msg,
+            }
+
+        if any(
+            k in err_msg.lower()
+            for k in ("deadline", "timeout", "timed out", "unavailable", "connection reset")
+        ):
+            return {
+                "error": (
+                    "The AI service did not respond in time — this is usually caused by a slow or "
+                    "unstable internet connection. Please check your network and try again."
+                ),
+                "error_kind": "timeout",
+            }
+
+        return {"error": f"Analysis failed: {err_msg}", "error_kind": "api_error", "detail": err_msg}
 
     def generate_pdf_report(self, analysis_result, candidate_name, job_role):
         """Generate a PDF report of the analysis"""
@@ -354,6 +594,9 @@ class AIResumeAnalyzer:
                 if not text:
                     return ""
                 
+                text = re.sub(r"<strong>([^<]*)</strong>", r"\1", text, flags=re.IGNORECASE)
+                text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+
                 # Remove markdown formatting for bold and italic
                 text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove ** for bold
                 text = re.sub(r'\*(.*?)\*', r'\1', text)      # Remove * for italic
@@ -365,6 +608,10 @@ class AIResumeAnalyzer:
                 
                 # Remove markdown formatting for links
                 text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+                
+                # Strip any remaining HTML-like tags (malformed <strong></para> breaks ReportLab Paragraph)
+                text = re.sub(r"<[^>]+>", "", text)
+                text = text.replace("&nbsp;", " ").replace("&#160;", " ")
                 
                 return text.strip()
             
@@ -908,7 +1155,7 @@ class AIResumeAnalyzer:
                 
                 # Process content based on section
                 if section_title == "Skills Analysis":
-                    # Extract current and missing skills
+                    # Extract current and missing skills (include prose lines; bullets optional)
                     current_skills = []
                     missing_skills = []
                     
@@ -916,20 +1163,18 @@ class AIResumeAnalyzer:
                         current_part = section_content.split("Current Skills")[1]
                         if "Missing Skills" in current_part:
                             current_part = current_part.split("Missing Skills")[0]
-                        
-                        for line in current_part.split("\n"):
-                            if line.strip() and ("-" in line or "*" in line or "•" in line):
-                                skill = line.replace("-", "").replace("*", "").replace("•", "").strip()
-                                if skill:
-                                    current_skills.append(skill)
+                        current_skills = _extract_skills_lines_from_block(
+                            current_part, clean_markdown, full_block_fallback=False
+                        )
                     
                     if "Missing Skills" in section_content:
                         missing_part = section_content.split("Missing Skills")[1]
-                        for line in missing_part.split("\n"):
-                            if line.strip() and ("-" in line or "*" in line or "•" in line):
-                                skill = line.replace("-", "").replace("*", "").replace("•", "").strip()
-                                if skill:
-                                    missing_skills.append(skill)
+                        missing_skills = _extract_skills_lines_from_block(
+                            missing_part,
+                            clean_markdown,
+                            full_block_fallback=True,
+                            strip_leading_label_re=r"^\*{0,2}\s*Missing\s+Skills\*{0,2}\s*:?\s*",
+                        )
                     
                     # Create skills table with better formatting
                     if current_skills or missing_skills:
@@ -1178,12 +1423,12 @@ class AIResumeAnalyzer:
                 missing_section = analysis_text.split("Missing Skills")[1]
                 if "##" in missing_section:
                     missing_section = missing_section.split("##")[0]
-                
-                for line in missing_section.split("\n"):
-                    if line.strip() and ("-" in line or "*" in line or "•" in line):
-                        skill = line.replace("-", "").replace("*", "").replace("•", "").strip()
-                        if skill:
-                            missing_skills.append(skill)
+                missing_skills = _extract_skills_lines_from_block(
+                    missing_section,
+                    _clean_text_for_skill_extract,
+                    full_block_fallback=True,
+                    strip_leading_label_re=r"^\*{0,2}\s*Missing\s+Skills\*{0,2}\s*:?\s*",
+                )
         except Exception as e:
             st.warning(f"Error extracting missing skills: {str(e)}")
         
@@ -1264,7 +1509,7 @@ class AIResumeAnalyzer:
             # Choose the appropriate model for analysis
             if model == "Google Gemini":
                 result = self.analyze_resume_with_gemini(resume_text, job_description, job_role)
-                model_used = "Google Gemini"
+                model_used = result.get("model_used", "Google Gemini")
             elif model == "Anthropic Claude":
                 result = self.analyze_resume_with_anthropic(resume_text, job_description, job_role)
                 # Get the actual model used from the result
@@ -1272,7 +1517,21 @@ class AIResumeAnalyzer:
             else:
                 # Default to Gemini if model not recognized
                 result = self.analyze_resume_with_gemini(resume_text, job_description, job_role)
-                model_used = "Google Gemini"
+                model_used = result.get("model_used", "Google Gemini")
+
+            if isinstance(result, dict) and result.get("error"):
+                return {
+                    "error": result["error"],
+                    "error_kind": result.get("error_kind"),
+                    "detail": result.get("detail"),
+                    "score": 0,
+                    "ats_score": 0,
+                    "strengths": [],
+                    "weaknesses": [],
+                    "suggestions": [],
+                    "full_response": result.get("detail") or result["error"],
+                    "model_used": result.get("model_used") or model_used,
+                }
             
             # Process the result to extract structured information
             analysis_text = result.get("analysis", "")
@@ -1362,6 +1621,9 @@ class AIResumeAnalyzer:
                 if not text:
                     return ""
                 
+                text = re.sub(r"<strong>([^<]*)</strong>", r"\1", text, flags=re.IGNORECASE)
+                text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+
                 # Remove markdown formatting for bold and italic
                 text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove ** for bold
                 text = re.sub(r'\*(.*?)\*', r'\1', text)      # Remove * for italic
@@ -1373,6 +1635,9 @@ class AIResumeAnalyzer:
                 
                 # Remove markdown formatting for links
                 text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+                
+                text = re.sub(r"<[^>]+>", "", text)
+                text = text.replace("&nbsp;", " ").replace("&#160;", " ")
                 
                 return text.strip()
             
@@ -1904,7 +2169,6 @@ class AIResumeAnalyzer:
             
             # Process content based on section
             if section_title == "Skills Analysis":
-                # Extract current and missing skills
                 current_skills = []
                 missing_skills = []
                 
@@ -1912,20 +2176,18 @@ class AIResumeAnalyzer:
                     current_part = section_content.split("Current Skills")[1]
                     if "Missing Skills" in current_part:
                         current_part = current_part.split("Missing Skills")[0]
-                    
-                    for line in current_part.split("\n"):
-                        if line.strip() and ("-" in line or "*" in line or "•" in line):
-                            skill = clean_markdown(line.replace("-", "").replace("*", "").replace("•", "").strip())
-                            if skill:
-                                current_skills.append(skill)
+                    current_skills = _extract_skills_lines_from_block(
+                        current_part, clean_markdown, full_block_fallback=False
+                    )
                 
                 if "Missing Skills" in section_content:
                     missing_part = section_content.split("Missing Skills")[1]
-                    for line in missing_part.split("\n"):
-                        if line.strip() and ("-" in line or "*" in line or "•" in line):
-                            skill = clean_markdown(line.replace("-", "").replace("*", "").replace("•", "").strip())
-                            if skill:
-                                missing_skills.append(skill)
+                    missing_skills = _extract_skills_lines_from_block(
+                        missing_part,
+                        clean_markdown,
+                        full_block_fallback=True,
+                        strip_leading_label_re=r"^\*{0,2}\s*Missing\s+Skills\*{0,2}\s*:?\s*",
+                    )
                 
                 # Create skills table with better formatting
                 if current_skills or missing_skills:
