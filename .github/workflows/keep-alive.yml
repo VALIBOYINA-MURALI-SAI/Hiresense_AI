@@ -1,9 +1,6 @@
 name: Keep Streamlit Cloud Alive
-
 on:
   schedule:
-    # Every 20 minutes, 24/7. Streamlit Community Cloud sleeps after ~7 days
-    # of inactivity; periodic pings prevent that.
     - cron: "*/20 * * * *"
   workflow_dispatch: {}
 
@@ -12,9 +9,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping app
-        # Replace the URL below with your actual Streamlit Cloud app URL.
-        # Alternatively, use UptimeRobot (free) for the same effect with a
-        # dashboard and alerting: https://uptimerobot.com
+        env:
+          APP_URL: ${{ vars.STREAMLIT_APP_URL || 'https://hire-sense-ai-srm.streamlit.app/' }}
         run: |
-          curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" \
-            "${{ vars.STREAMLIT_APP_URL || 'https://hire-sense-ai-srm.streamlit.app/' }}"
+          set -euo pipefail
+
+          echo "Pinging $APP_URL"
+
+          # -L        follow redirects (fixes the 303)
+          # -A        realistic User-Agent (avoids bot-blocking edge cases)
+          # --retry   retry transient failures / cold starts
+          # -s -S     silent but show errors
+          # -o /dev/null, -w print final code + timing after following redirects
+          HTTP_CODE=$(curl -sS -L \
+            -A "Mozilla/5.0 (compatible; KeepAliveBot/1.0; +https://github.com/actions)" \
+            --retry 3 --retry-delay 5 --retry-connrefused \
+            --max-time 30 \
+            -o /dev/null \
+            -w "%{http_code}" \
+            "$APP_URL")
+
+          echo "Final HTTP status: $HTTP_CODE"
+
+          # Streamlit Cloud can briefly return 200 with a "waking up" page too,
+          # so treat any 2xx as success. Fail the job only on real errors.
+          if [[ "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
+            echo "✅ App is up (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Unexpected status: $HTTP_CODE"
+            exit 1
+          fi
